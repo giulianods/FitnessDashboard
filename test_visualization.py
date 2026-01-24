@@ -54,7 +54,7 @@ def main():
     print(f"Generated {len(sample_data)} data points")
     
     print("\nCreating visualization...")
-    create_heart_rate_chart(sample_data, 'test_heart_rate_chart.html')
+    create_heart_rate_chart(sample_data, 'test_heart_rate_chart.html', open_browser=False)
     
     print("\n✓ Test chart created successfully!")
     print("  Open test_heart_rate_chart.html in your browser to view the chart.")
