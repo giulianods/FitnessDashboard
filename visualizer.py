@@ -90,7 +90,7 @@ def create_heart_rate_chart(data: List[Dict], output_file: str = 'heart_rate_cha
         yaxis=dict(
             showgrid=True,
             gridcolor='#E0E0E0',
-            rangemode='tozero'
+            range=[0, max_hr * 0.90 * 1.1]  # Scale to 10% above the highest zone (Zone 3 upper limit)
         ),
         hovermode='x unified',
         plot_bgcolor='white',
