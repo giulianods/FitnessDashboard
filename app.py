@@ -10,6 +10,8 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.utils
 import json
+import numpy as np
+from scipy import stats
 
 app = Flask(__name__)
 
@@ -185,14 +187,60 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
         showlegend=False
     ), row=2, col=1)
     
-    # Add histogram for HR distribution during waking hours
+    # Add histogram for HR distribution during waking hours with lognormal fit
     if waking_hours_hr:
+        # Add histogram
         fig.add_trace(go.Histogram(
             x=waking_hours_hr,
             nbinsx=50,  # Increased from 30 for more granularity
             marker=dict(color='#4A90E2', line=dict(color='white', width=1)),
-            showlegend=False
+            showlegend=False,
+            name='HR Distribution',
+            histnorm='probability density'  # Normalize to show density for comparison with fitted curve
         ), row=2, col=2)
+        
+        # Fit lognormal distribution
+        # Only use positive values for lognormal fit
+        hr_positive = [hr for hr in waking_hours_hr if hr > 0]
+        if hr_positive:
+            # Fit lognormal distribution to the data
+            shape, loc, scale = stats.lognorm.fit(hr_positive, floc=0)
+            
+            # Calculate mean and standard deviation of the fitted lognormal distribution
+            lognorm_mean = scale * np.exp(shape**2 / 2)
+            lognorm_std = scale * np.sqrt((np.exp(shape**2) - 1) * np.exp(shape**2))
+            
+            # Generate smooth curve for the fitted distribution
+            x_fit = np.linspace(0, max_hr, 200)
+            y_fit = stats.lognorm.pdf(x_fit, shape, loc, scale)
+            
+            # Add fitted lognormal curve
+            fig.add_trace(go.Scatter(
+                x=x_fit,
+                y=y_fit,
+                mode='lines',
+                line=dict(color='#FF6347', width=2.5, dash='solid'),
+                name='Lognormal Fit',
+                showlegend=True
+            ), row=2, col=2)
+            
+            # Add annotation showing mean and standard deviation
+            lognorm_stats_text = f'μ = {lognorm_mean:.1f} bpm<br>σ = {lognorm_std:.1f} bpm'
+            fig.add_annotation(
+                text=lognorm_stats_text,
+                xref='x3',
+                yref='y3',
+                x=max_hr * 0.75,
+                y=max(y_fit) * 0.85,
+                showarrow=False,
+                font=dict(size=11, color='#FF6347', family='Arial'),
+                bgcolor='rgba(255, 255, 255, 0.8)',
+                bordercolor='#FF6347',
+                borderwidth=1.5,
+                borderpad=4,
+                align='left',
+                row=2, col=2
+            )
     
     # Calculate statistics
     avg_hr = sum(heart_rates) / len(heart_rates)
