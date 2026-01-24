@@ -15,6 +15,16 @@ app = Flask(__name__)
 
 # Configuration
 DEFAULT_MAX_HR = 190  # Default maximum heart rate for cardio zones
+WAKING_HOURS_DURATION = 16 * 60  # Duration of waking hours in minutes (6:00-22:00)
+
+def format_time(minutes):
+    """Format time in minutes to human-readable hours and minutes string."""
+    hours = int(minutes // 60)
+    mins = int(minutes % 60)
+    if hours > 0:
+        return f"{hours}h {mins}m"
+    else:
+        return f"{mins}m"
 
 # Global Garmin client (will be initialized on first request)
 garmin_client = None
@@ -83,23 +93,24 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
                     zone_distribution[zone_name] += 1
                     break
     
-    # Convert counts to time in minutes (assuming each data point represents ~1 second)
-    # Garmin typically records HR every few seconds, so we'll estimate
+    # Convert counts to time in minutes
+    # Calculate time based on proportion of data points in each zone
+    # Total waking hours (6:00-22:00) = 16 hours = 960 minutes
     total_waking_points = len(waking_hours_hr)
     
     # Calculate time in minutes for each zone
     zone_times = {}
     for zone, count in zone_distribution.items():
-        # Assuming data points are roughly evenly spaced
+        # Proportional time calculation: (zone_count / total_points) * total_waking_minutes
         if total_waking_points > 0:
-            time_minutes = (count / total_waking_points) * (16 * 60)  # 16 hours of waking time
+            time_minutes = (count / total_waking_points) * WAKING_HOURS_DURATION
             zone_times[zone] = time_minutes
         else:
             zone_times[zone] = 0
     
     # Calculate time below Z0
     if total_waking_points > 0:
-        below_z0_time = (below_z0_count / total_waking_points) * (16 * 60)
+        below_z0_time = (below_z0_count / total_waking_points) * WAKING_HOURS_DURATION
     else:
         below_z0_time = 0
     
@@ -162,15 +173,6 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
     zone_time_values = [below_z0_time] + [zone_times[z] for z in garmin_zones.keys()]
     zone_labels = ['Below Z0 (<50%)'] + [f"{z} - {garmin_zones[z][2]}" for z in garmin_zones.keys()]
     zone_colors_with_below = ['#B0C4DE'] + zone_colors  # Light steel blue for below Z0
-    
-    # Format time display (hours and minutes)
-    def format_time(minutes):
-        hours = int(minutes // 60)
-        mins = int(minutes % 60)
-        if hours > 0:
-            return f"{hours}h {mins}m"
-        else:
-            return f"{mins}m"
     
     fig.add_trace(go.Bar(
         y=zone_labels,
