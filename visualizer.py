@@ -60,6 +60,18 @@ def create_heart_rate_chart(data: List[Dict], output_file: str = 'heart_rate_cha
                 annotation_font_size=10,
                 annotation_font_color='#666'
             )
+        else:
+            # For the last zone (open-ended), add annotation at the lower boundary
+            fig.add_hline(
+                y=lower,
+                line_dash="dash",
+                line_color=zone_colors[idx],
+                line_width=1,
+                annotation_text=f"{zone_name} (>{int(lower)} bpm)",
+                annotation_position="right",
+                annotation_font_size=10,
+                annotation_font_color='#666'
+            )
     
     # Add heart rate trace (light blue color)
     fig.add_trace(go.Scatter(
