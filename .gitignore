@@ -41,3 +41,4 @@ credentials.json
 # Output files
 *.html
 heart_rate_chart.html
+test_heart_rate_chart.html
