@@ -1,15 +1,17 @@
 # FitnessDashboard
 
-A Python application that connects to your Garmin account, retrieves heart rate data, and creates beautiful interactive visualizations using Plotly.
+A Python application that connects to your Garmin account, retrieves heart rate data, and creates beautiful interactive visualizations using Plotly. Now features an interactive web interface!
 
 ## Features
 
 - 🔐 Secure authentication with Garmin Connect
 - 📊 Interactive heart rate line charts with Plotly
-- 📅 Retrieves yesterday's heart rate data by default
-- 🎯 Support for custom date selection
+- 🌐 **Web Interface** - Interactive date picker to view any day's data
+- 📅 Retrieves heart rate data for any selected date
+- 🎯 Real-time chart updates when selecting different dates
 - 📈 Displays statistics (average, max, min heart rate)
-- 🌐 Outputs interactive HTML charts that can be opened in any browser
+- 💙 Beautiful light blue color scheme with cardio zones
+- 📍 Cardio zone overlays based on maximum heart rate
 
 ## Prerequisites
 
@@ -47,7 +49,30 @@ cp config.json.example config.json
 
 ## Usage
 
-### Basic Usage (Yesterday's Data)
+### Web Application (Recommended)
+
+Launch the interactive web interface:
+
+```bash
+python app.py
+```
+
+Then open your browser and navigate to:
+```
+http://localhost:5000
+```
+
+**Features:**
+- 📅 Interactive date picker to select any date
+- 🔄 Real-time chart updates
+- 📊 Statistics cards showing avg/max/min heart rate
+- 🎨 Beautiful, modern UI with gradient design
+- 📱 Responsive layout that works on all devices
+- ⚡ Quick access buttons for "Yesterday" and "Today"
+
+### Command Line Interface
+
+#### Basic Usage (Yesterday's Data)
 
 Retrieve and visualize yesterday's heart rate data:
 

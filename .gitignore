@@ -42,3 +42,8 @@ credentials.json
 *.html
 heart_rate_chart.html
 test_heart_rate_chart.html
+!templates/*.html
+
+# Flask
+instance/
+.webassets-cache

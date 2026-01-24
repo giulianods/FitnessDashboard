@@ -2,3 +2,4 @@ garminconnect==0.2.12
 plotly==5.18.0
 pandas==2.1.4
 python-dotenv==1.0.0
+flask==3.0.0
