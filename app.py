@@ -31,7 +31,7 @@ def get_garmin_client():
 
 def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
     """
-    Create chart JSON for Plotly
+    Create chart JSON for Plotly with main line chart, zone distribution bar chart, and HR histogram
     
     Args:
         data: List of dictionaries with 'timestamp' and 'heart_rate' keys
@@ -50,49 +50,82 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
     # Get date for title
     date_str = data[0]['timestamp'].strftime('%Y-%m-%d')
     
-    # Calculate cardio zone boundaries based on max HR
-    zones = {
-        'Zone -2': (0, max_hr * 0.40),
-        'Zone -1': (max_hr * 0.40, max_hr * 0.50),
-        'Zone 0': (max_hr * 0.50, max_hr * 0.60),
-        'Zone 1': (max_hr * 0.60, max_hr * 0.70),
-        'Zone 2': (max_hr * 0.70, max_hr * 0.80),
-        'Zone 3': (max_hr * 0.80, max_hr * 0.90),
-        'Zone 4': (max_hr * 0.90, max_hr * 1.20),
+    # Garmin HR Zones (Z0-Z5) based on max HR
+    garmin_zones = {
+        'Z0': (max_hr * 0.50, max_hr * 0.60, 'Warm-up'),
+        'Z1': (max_hr * 0.60, max_hr * 0.70, 'Easy'),
+        'Z2': (max_hr * 0.70, max_hr * 0.80, 'Aerobic'),
+        'Z3': (max_hr * 0.80, max_hr * 0.90, 'Threshold'),
+        'Z4': (max_hr * 0.90, max_hr * 1.00, 'Maximum'),
+        'Z5': (max_hr * 1.00, max_hr * 1.20, 'Peak'),
     }
     
-    # Create the plotly figure
-    fig = go.Figure()
+    # Filter data for waking hours (6:00-22:00)
+    waking_hours_data = []
+    for point in data:
+        hour = point['timestamp'].hour
+        if 6 <= hour < 22:
+            waking_hours_data.append(point)
     
-    # Add cardio zone lines
-    zone_colors = ['#E8E8E8', '#D0D0D0', '#B8B8B8', '#A0A0A0', '#888888', '#707070', '#585858']
-    for idx, (zone_name, (lower, upper)) in enumerate(zones.items()):
+    waking_hours_hr = [point['heart_rate'] for point in waking_hours_data]
+    
+    # Calculate zone distribution for waking hours
+    zone_distribution = {zone: 0 for zone in garmin_zones.keys()}
+    for hr in waking_hours_hr:
+        for zone_name, (lower, upper, _) in garmin_zones.items():
+            if lower <= hr < upper:
+                zone_distribution[zone_name] += 1
+                break
+    
+    # Convert counts to percentages
+    total_waking_points = len(waking_hours_hr)
+    zone_percentages = {zone: (count / total_waking_points * 100) if total_waking_points > 0 else 0 
+                        for zone, count in zone_distribution.items()}
+    
+    # Create subplots: 1 row with main chart on top, 2 charts below
+    from plotly.subplots import make_subplots
+    fig = make_subplots(
+        rows=2, cols=2,
+        row_heights=[0.65, 0.35],
+        column_widths=[0.5, 0.5],
+        subplot_titles=('Heart Rate Timeline', 'Zone Distribution (Waking Hours)', 'HR Distribution (Waking Hours)'),
+        specs=[[{'colspan': 2}, None],
+               [{}, {}]],
+        vertical_spacing=0.12,
+        horizontal_spacing=0.1
+    )
+    
+    # Add cardio zone lines to main chart
+    zone_colors = ['#90EE90', '#FFD700', '#FFA500', '#FF6347', '#DC143C', '#8B0000']
+    for idx, (zone_name, (lower, upper, desc)) in enumerate(garmin_zones.items()):
         # Add horizontal line at the upper boundary (except for the last zone)
-        if idx < len(zones) - 1:
+        if idx < len(garmin_zones) - 1:
             fig.add_hline(
                 y=upper,
                 line_dash="dash",
-                line_color=zone_colors[idx],
+                line_color='#CCCCCC',
                 line_width=1,
                 annotation_text=f"{zone_name} ({int(lower)}-{int(upper)} bpm)",
                 annotation_position="right",
-                annotation_font_size=10,
-                annotation_font_color='#666'
+                annotation_font_size=9,
+                annotation_font_color='#666',
+                row=1, col=1
             )
         else:
             # For the last zone (open-ended), add annotation at the lower boundary
             fig.add_hline(
                 y=lower,
                 line_dash="dash",
-                line_color=zone_colors[idx],
+                line_color='#CCCCCC',
                 line_width=1,
                 annotation_text=f"{zone_name} (>{int(lower)} bpm)",
                 annotation_position="right",
-                annotation_font_size=10,
-                annotation_font_color='#666'
+                annotation_font_size=9,
+                annotation_font_color='#666',
+                row=1, col=1
             )
     
-    # Add heart rate trace (light blue color)
+    # Add heart rate trace (light blue color) to main chart
     fig.add_trace(go.Scatter(
         x=timestamps,
         y=heart_rates,
@@ -100,8 +133,33 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
         name='Heart Rate',
         line=dict(color='#4A90E2', width=2),
         fill='tozeroy',
-        fillcolor='rgba(74, 144, 226, 0.2)'
-    ))
+        fillcolor='rgba(74, 144, 226, 0.2)',
+        showlegend=False
+    ), row=1, col=1)
+    
+    # Add horizontal bar chart for zone distribution
+    zone_names = list(garmin_zones.keys())
+    zone_pcts = [zone_percentages[z] for z in zone_names]
+    zone_labels = [f"{z} - {garmin_zones[z][2]}" for z in zone_names]
+    
+    fig.add_trace(go.Bar(
+        y=zone_labels,
+        x=zone_pcts,
+        orientation='h',
+        marker=dict(color=zone_colors),
+        text=[f"{pct:.1f}%" for pct in zone_pcts],
+        textposition='auto',
+        showlegend=False
+    ), row=2, col=1)
+    
+    # Add histogram for HR distribution during waking hours
+    if waking_hours_hr:
+        fig.add_trace(go.Histogram(
+            x=waking_hours_hr,
+            nbinsx=30,
+            marker=dict(color='#4A90E2', line=dict(color='white', width=1)),
+            showlegend=False
+        ), row=2, col=2)
     
     # Calculate statistics
     avg_hr = sum(heart_rates) / len(heart_rates)
@@ -114,26 +172,55 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
             'text': f'Heart Rate Data - {date_str}',
             'x': 0.5,
             'xanchor': 'center',
-            'font': {'size': 24, 'color': '#333'}
+            'font': {'size': 20, 'color': '#333'}
         },
-        xaxis_title='Time',
-        yaxis_title='Heart Rate (bpm)',
-        xaxis=dict(
-            showgrid=True,
-            gridcolor='#E0E0E0',
-            tickformat='%H:%M'
-        ),
-        yaxis=dict(
-            showgrid=True,
-            gridcolor='#E0E0E0',
-            range=[0, max_hr * 0.90 * 1.1]  # Scale to 10% above Zone 3 upper limit (90% of max HR)
-        ),
-        hovermode='x unified',
         plot_bgcolor='white',
         paper_bgcolor='white',
-        font=dict(family='Arial, sans-serif', size=12, color='#333'),
-        height=500,
+        font=dict(family='Arial, sans-serif', size=11, color='#333'),
+        height=700,
         margin=dict(l=60, r=60, t=80, b=60)
+    )
+    
+    # Update axes for main chart
+    fig.update_xaxes(
+        title_text='Time',
+        showgrid=True,
+        gridcolor='#E0E0E0',
+        tickformat='%H:%M',
+        row=1, col=1
+    )
+    fig.update_yaxes(
+        title_text='Heart Rate (bpm)',
+        showgrid=True,
+        gridcolor='#E0E0E0',
+        range=[0, max_hr * 0.90 * 1.1],
+        row=1, col=1
+    )
+    
+    # Update axes for bar chart
+    fig.update_xaxes(
+        title_text='Percentage of Time (%)',
+        showgrid=True,
+        gridcolor='#E0E0E0',
+        row=2, col=1
+    )
+    fig.update_yaxes(
+        title_text='',
+        row=2, col=1
+    )
+    
+    # Update axes for histogram
+    fig.update_xaxes(
+        title_text='Heart Rate (bpm)',
+        showgrid=True,
+        gridcolor='#E0E0E0',
+        row=2, col=2
+    )
+    fig.update_yaxes(
+        title_text='Frequency',
+        showgrid=True,
+        gridcolor='#E0E0E0',
+        row=2, col=2
     )
     
     # Add statistics annotation
@@ -148,9 +235,9 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
         xref='paper',
         yref='paper',
         x=0.5,
-        y=-0.15,
+        y=-0.12,
         showarrow=False,
-        font=dict(size=14, color='#666'),
+        font=dict(size=12, color='#666'),
         xanchor='center'
     )
     
