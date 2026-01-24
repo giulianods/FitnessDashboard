@@ -7,9 +7,13 @@ from flask import Flask, render_template, request, jsonify
 from datetime import datetime, timedelta
 from garmin_client import GarminClient
 import plotly.graph_objects as go
+import plotly.utils
 import json
 
 app = Flask(__name__)
+
+# Configuration
+DEFAULT_MAX_HR = 190  # Default maximum heart rate for cardio zones
 
 # Global Garmin client (will be initialized on first request)
 garmin_client = None
@@ -25,13 +29,13 @@ def get_garmin_client():
     return garmin_client
 
 
-def create_chart_json(data, max_hr=190):
+def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
     """
     Create chart JSON for Plotly
     
     Args:
         data: List of dictionaries with 'timestamp' and 'heart_rate' keys
-        max_hr: Maximum heart rate for calculating cardio zones (default: 190)
+        max_hr: Maximum heart rate for calculating cardio zones (default: DEFAULT_MAX_HR)
     
     Returns:
         JSON string for Plotly chart
@@ -158,7 +162,7 @@ def index():
     """Main page with date picker"""
     # Default to yesterday
     default_date = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
-    return render_template('index.html', default_date=default_date)
+    return render_template('index.html', default_date=default_date, max_hr=DEFAULT_MAX_HR)
 
 
 @app.route('/get_heart_rate_data')
