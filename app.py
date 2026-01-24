@@ -210,19 +210,18 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
             lognorm_mean = scale * np.exp(shape**2 / 2)
             lognorm_std = scale * np.sqrt((np.exp(shape**2) - 1) * np.exp(shape**2))
             
-            # Generate smooth curve for the fitted distribution - use more points and wider range
-            x_fit = np.linspace(max(0, min(hr_positive) - 10), min(max_hr, max(hr_positive) + 20), 300)
+            # Generate smooth curve for the fitted distribution
+            x_fit = np.linspace(0, max_hr, 200)
             y_fit = stats.lognorm.pdf(x_fit, shape, loc, scale)
             
-            # Add fitted lognormal curve with secondary y-axis for better visibility
+            # Add fitted lognormal curve
             fig.add_trace(go.Scatter(
                 x=x_fit,
                 y=y_fit,
                 mode='lines',
-                line=dict(color='red', width=3, dash='dash'),
+                line=dict(color='#FF6347', width=2.5, dash='solid'),
                 name='Lognormal Fit',
-                showlegend=False,
-                yaxis='y3'
+                showlegend=True
             ), row=2, col=2)
             
             # Add annotation showing mean and standard deviation
@@ -230,18 +229,17 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
             fig.add_annotation(
                 text=lognorm_stats_text,
                 xref='x3',
-                yref='paper',
-                x=max_hr * 0.70,
-                y=0.95,
-                xanchor='left',
-                yanchor='top',
+                yref='y3',
+                x=max_hr * 0.75,
+                y=max(y_fit) * 0.85,
                 showarrow=False,
-                font=dict(size=12, color='red', family='Arial, sans-serif'),
-                bgcolor='rgba(255, 255, 255, 0.9)',
-                bordercolor='red',
-                borderwidth=2,
-                borderpad=6,
-                align='left'
+                font=dict(size=11, color='#FF6347', family='Arial'),
+                bgcolor='rgba(255, 255, 255, 0.8)',
+                bordercolor='#FF6347',
+                borderwidth=1.5,
+                borderpad=4,
+                align='left',
+                row=2, col=2
             )
     
     # Calculate statistics
