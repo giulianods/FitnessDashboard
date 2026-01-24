@@ -72,16 +72,36 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
     
     # Calculate zone distribution for waking hours
     zone_distribution = {zone: 0 for zone in garmin_zones.keys()}
-    for hr in waking_hours_hr:
-        for zone_name, (lower, upper, _) in garmin_zones.items():
-            if lower <= hr < upper:
-                zone_distribution[zone_name] += 1
-                break
+    below_z0_count = 0  # Count for HR below Zone 0 (below 50% max HR)
     
-    # Convert counts to percentages
+    for hr in waking_hours_hr:
+        if hr < max_hr * 0.50:
+            below_z0_count += 1
+        else:
+            for zone_name, (lower, upper, _) in garmin_zones.items():
+                if lower <= hr < upper:
+                    zone_distribution[zone_name] += 1
+                    break
+    
+    # Convert counts to time in minutes (assuming each data point represents ~1 second)
+    # Garmin typically records HR every few seconds, so we'll estimate
     total_waking_points = len(waking_hours_hr)
-    zone_percentages = {zone: (count / total_waking_points * 100) if total_waking_points > 0 else 0 
-                        for zone, count in zone_distribution.items()}
+    
+    # Calculate time in minutes for each zone
+    zone_times = {}
+    for zone, count in zone_distribution.items():
+        # Assuming data points are roughly evenly spaced
+        if total_waking_points > 0:
+            time_minutes = (count / total_waking_points) * (16 * 60)  # 16 hours of waking time
+            zone_times[zone] = time_minutes
+        else:
+            zone_times[zone] = 0
+    
+    # Calculate time below Z0
+    if total_waking_points > 0:
+        below_z0_time = (below_z0_count / total_waking_points) * (16 * 60)
+    else:
+        below_z0_time = 0
     
     # Create subplots: 1 row with main chart on top, 2 charts below
     fig = make_subplots(
@@ -137,17 +157,27 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
         showlegend=False
     ), row=1, col=1)
     
-    # Add horizontal bar chart for zone distribution
-    zone_names = list(garmin_zones.keys())
-    zone_pcts = [zone_percentages[z] for z in zone_names]
-    zone_labels = [f"{z} - {garmin_zones[z][2]}" for z in zone_names]
+    # Add horizontal bar chart for zone distribution (with Below Z0)
+    zone_names = ['Below Z0'] + list(garmin_zones.keys())
+    zone_time_values = [below_z0_time] + [zone_times[z] for z in garmin_zones.keys()]
+    zone_labels = ['Below Z0 (<50%)'] + [f"{z} - {garmin_zones[z][2]}" for z in garmin_zones.keys()]
+    zone_colors_with_below = ['#B0C4DE'] + zone_colors  # Light steel blue for below Z0
+    
+    # Format time display (hours and minutes)
+    def format_time(minutes):
+        hours = int(minutes // 60)
+        mins = int(minutes % 60)
+        if hours > 0:
+            return f"{hours}h {mins}m"
+        else:
+            return f"{mins}m"
     
     fig.add_trace(go.Bar(
         y=zone_labels,
-        x=zone_pcts,
+        x=zone_time_values,
         orientation='h',
-        marker=dict(color=zone_colors),
-        text=[f"{pct:.1f}%" for pct in zone_pcts],
+        marker=dict(color=zone_colors_with_below),
+        text=[format_time(t) for t in zone_time_values],
         textposition='auto',
         showlegend=False
     ), row=2, col=1)
@@ -199,7 +229,7 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
     
     # Update axes for bar chart
     fig.update_xaxes(
-        title_text='Percentage of Time (%)',
+        title_text='Time (minutes)',
         showgrid=True,
         gridcolor='#E0E0E0',
         row=2, col=1
