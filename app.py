@@ -7,6 +7,7 @@ from flask import Flask, render_template, request, jsonify
 from datetime import datetime, timedelta
 from garmin_client import GarminClient
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import plotly.utils
 import json
 
@@ -83,7 +84,6 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
                         for zone, count in zone_distribution.items()}
     
     # Create subplots: 1 row with main chart on top, 2 charts below
-    from plotly.subplots import make_subplots
     fig = make_subplots(
         rows=2, cols=2,
         row_heights=[0.65, 0.35],
