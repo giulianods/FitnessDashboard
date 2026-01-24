@@ -132,7 +132,7 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
         plot_bgcolor='white',
         paper_bgcolor='white',
         font=dict(family='Arial, sans-serif', size=12, color='#333'),
-        autosize=True,
+        height=500,
         margin=dict(l=60, r=60, t=80, b=60)
     )
     
