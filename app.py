@@ -156,7 +156,7 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
     if waking_hours_hr:
         fig.add_trace(go.Histogram(
             x=waking_hours_hr,
-            nbinsx=30,
+            nbinsx=50,  # Increased from 30 for more granularity
             marker=dict(color='#4A90E2', line=dict(color='white', width=1)),
             showlegend=False
         ), row=2, col=2)
@@ -214,6 +214,7 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
         title_text='Heart Rate (bpm)',
         showgrid=True,
         gridcolor='#E0E0E0',
+        range=[0, max_hr],  # Show complete interval from 0 to max HR
         row=2, col=2
     )
     fig.update_yaxes(
