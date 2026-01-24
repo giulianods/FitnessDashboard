@@ -68,7 +68,7 @@ def create_heart_rate_chart(data: List[Dict], output_file: str = 'heart_rate_cha
         margin=dict(l=80, r=80, t=100, b=80)
     )
     
-    # Add statistics annotation
+    # Add statistics annotation and display summary
     if heart_rates:
         avg_hr = sum(heart_rates) / len(heart_rates)
         max_hr = max(heart_rates)
@@ -95,7 +95,7 @@ def create_heart_rate_chart(data: List[Dict], output_file: str = 'heart_rate_cha
     fig.write_html(output_file)
     print(f"Chart saved to {output_file}")
     
-    # Also display summary statistics
+    # Display summary statistics
     if heart_rates:
         print(f"\nHeart Rate Statistics:")
         print(f"  Average: {avg_hr:.1f} bpm")
