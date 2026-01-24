@@ -33,22 +33,7 @@
         }
         
         .header {
-            background: #4A90E2;
-            color: white;
-            padding: 15px 30px;
-            text-align: center;
-            flex-shrink: 0;
-        }
-        
-        .header h1 {
-            font-size: 2em;
-            margin-bottom: 5px;
-            font-weight: 600;
-        }
-        
-        .header p {
-            font-size: 0.95em;
-            opacity: 0.9;
+            display: none;
         }
         
         .controls {
@@ -334,6 +319,14 @@
                     <div class="stat-card">
                         <h3>Data Points</h3>
                         <p>${stats.data_points}</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Time in Z2</h3>
+                        <p>${stats.time_z2}</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Time in Z4</h3>
+                        <p>${stats.time_z4}</p>
                     </div>
                 </div>
             `;

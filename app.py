@@ -59,7 +59,8 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
     heart_rates = [point['heart_rate'] for point in data]
     
     # Get date for title
-    date_str = data[0]['timestamp'].strftime('%Y-%m-%d')
+    date_obj = data[0]['timestamp']
+    date_str = date_obj.strftime('%A, %b %d, %Y')  # e.g., "Friday, Jan 24, 2026"
     
     # Garmin HR Zones (Z0-Z5) based on max HR
     garmin_zones = {
@@ -119,7 +120,7 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
         rows=2, cols=2,
         row_heights=[0.65, 0.35],
         column_widths=[0.5, 0.5],
-        subplot_titles=('Heart Rate Timeline', 'Zone Distribution (Waking Hours)', 'HR Distribution (Waking Hours)'),
+        subplot_titles=('', 'Zone Distribution (Waking Hours)', 'HR Distribution (Waking Hours)'),
         specs=[[{'colspan': 2}, None],
                [{}, {}]],
         vertical_spacing=0.12,
@@ -274,7 +275,7 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
         xanchor='center'
     )
     
-    return json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
+    return json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder), zone_times
 
 
 @app.route('/')
@@ -310,7 +311,7 @@ def get_heart_rate_data():
             }), 404
         
         # Create chart JSON
-        chart_json = create_chart_json(data)
+        chart_json, zone_times = create_chart_json(data)
         
         # Calculate statistics
         heart_rates = [point['heart_rate'] for point in data]
@@ -318,7 +319,9 @@ def get_heart_rate_data():
             'average': round(sum(heart_rates) / len(heart_rates), 1),
             'maximum': max(heart_rates),
             'minimum': min(heart_rates),
-            'data_points': len(heart_rates)
+            'data_points': len(heart_rates),
+            'time_z2': format_time(zone_times['Z2']),
+            'time_z4': format_time(zone_times['Z4'])
         }
         
         return jsonify({
