@@ -132,8 +132,8 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
         plot_bgcolor='white',
         paper_bgcolor='white',
         font=dict(family='Arial, sans-serif', size=12, color='#333'),
-        height=600,
-        margin=dict(l=80, r=80, t=100, b=80)
+        autosize=True,
+        margin=dict(l=60, r=60, t=80, b=60)
     )
     
     # Add statistics annotation
