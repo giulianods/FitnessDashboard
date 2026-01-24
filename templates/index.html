@@ -285,6 +285,9 @@
                     // Parse chart data
                     const chartData = JSON.parse(data.chart);
                     
+                    // Clear the chart div first
+                    document.getElementById('chart').innerHTML = '';
+                    
                     // Display chart
                     Plotly.newPlot('chart', chartData.data, chartData.layout, {
                         responsive: true,
