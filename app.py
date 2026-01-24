@@ -199,20 +199,31 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
             histnorm='probability density'  # Normalize to show density for comparison with fitted curve
         ), row=2, col=2)
         
-        # Fit lognormal distribution
-        # Only use positive values for lognormal fit
-        hr_positive = [hr for hr in waking_hours_hr if hr > 0]
-        if hr_positive:
-            # Fit lognormal distribution to the data
-            shape, loc, scale = stats.lognorm.fit(hr_positive, floc=0)
+        # Fit lognormal distribution shifted by resting heart rate
+        # Find minimum HR (resting heart rate) to use as the "zero" point
+        min_hr = min(waking_hours_hr)
+        
+        # Shift data so that minimum HR becomes zero
+        # Lognormal distributions cannot go below zero, so we shift the data
+        hr_shifted = [hr - min_hr for hr in waking_hours_hr]
+        
+        # Only fit to positive shifted values (should be all values after shift)
+        hr_positive_shifted = [hr for hr in hr_shifted if hr > 0]
+        if hr_positive_shifted:
+            # Fit lognormal distribution to the shifted data
+            shape, loc, scale = stats.lognorm.fit(hr_positive_shifted, floc=0)
             
             # Calculate mean and standard deviation of the fitted lognormal distribution
             lognorm_mean = scale * np.exp(shape**2 / 2)
             lognorm_std = scale * np.sqrt((np.exp(shape**2) - 1) * np.exp(shape**2))
             
             # Generate smooth curve for the fitted distribution
-            x_fit = np.linspace(0, max_hr, 200)
-            y_fit = stats.lognorm.pdf(x_fit, shape, loc, scale)
+            # Create x values in the shifted space
+            x_fit_shifted = np.linspace(0, max_hr - min_hr, 200)
+            y_fit = stats.lognorm.pdf(x_fit_shifted, shape, loc, scale)
+            
+            # Shift x values back to original HR scale for display
+            x_fit = x_fit_shifted + min_hr
             
             # Add fitted lognormal curve
             fig.add_trace(go.Scatter(
@@ -224,8 +235,10 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
                 showlegend=True
             ), row=2, col=2)
             
-            # Add annotation showing mean and standard deviation
-            lognorm_stats_text = f'μ = {lognorm_mean:.1f} bpm<br>σ = {lognorm_std:.1f} bpm'
+            # Add annotation showing mean, standard deviation, and resting HR
+            # Display the mean in the original scale (add back the min_hr)
+            lognorm_mean_original = lognorm_mean + min_hr
+            lognorm_stats_text = f'Resting HR: {min_hr:.0f} bpm<br>μ = {lognorm_mean_original:.1f} bpm<br>σ = {lognorm_std:.1f} bpm'
             fig.add_annotation(
                 text=lognorm_stats_text,
                 xref='x3',
