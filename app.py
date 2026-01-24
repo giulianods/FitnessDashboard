@@ -214,6 +214,9 @@ def get_heart_rate_data():
 
 
 if __name__ == '__main__':
+    import os
     print("Starting Fitness Dashboard Web App...")
     print("Open your browser and navigate to: http://localhost:5000")
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    # Only enable debug mode if explicitly set via environment variable
+    debug_mode = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
+    app.run(debug=debug_mode, host='0.0.0.0', port=5000)
