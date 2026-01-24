@@ -232,7 +232,7 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
                 mode='lines',
                 line=dict(color='#FF6347', width=2.5, dash='solid'),
                 name='Lognormal Fit',
-                showlegend=True
+                showlegend=False
             ), row=2, col=2)
             
             # Add annotation showing mean, standard deviation, and resting HR
@@ -316,24 +316,6 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
         showgrid=True,
         gridcolor='#E0E0E0',
         row=2, col=2
-    )
-    
-    # Add statistics annotation
-    stats_text = (
-        f'Average: {avg_hr:.0f} bpm | '
-        f'Max: {max_hr_data} bpm | '
-        f'Min: {min_hr_data} bpm'
-    )
-    
-    fig.add_annotation(
-        text=stats_text,
-        xref='paper',
-        yref='paper',
-        x=0.5,
-        y=-0.12,
-        showarrow=False,
-        font=dict(size=12, color='#666'),
-        xanchor='center'
     )
     
     return json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder), zone_times
