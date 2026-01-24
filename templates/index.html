@@ -212,8 +212,14 @@
             <div class="date-picker-container">
                 <label for="date-picker">Select Date:</label>
                 <input type="date" id="date-picker" value="{{ default_date }}">
-                <button onclick="loadYesterday()">Yesterday</button>
-                <button onclick="loadToday()">Today</button>
+                <button onclick="loadDaysAgo(1)">Yesterday</button>
+                <button onclick="loadDaysAgo(2)">YD-1</button>
+                <button onclick="loadDaysAgo(3)">YD-2</button>
+                <button onclick="loadDaysAgo(4)">YD-3</button>
+                <button onclick="loadDaysAgo(5)">YD-4</button>
+                <button onclick="loadDaysAgo(6)">YD-5</button>
+                <button onclick="loadDaysAgo(7)">YD-6</button>
+                <button onclick="loadDaysAgo(8)">YD-7</button>
             </div>
         </div>
         
@@ -240,16 +246,10 @@
             loadHeartRateData();
         });
         
-        function loadYesterday() {
-            const yesterday = new Date();
-            yesterday.setDate(yesterday.getDate() - 1);
-            document.getElementById('date-picker').value = yesterday.toISOString().split('T')[0];
-            loadHeartRateData();
-        }
-        
-        function loadToday() {
-            const today = new Date();
-            document.getElementById('date-picker').value = today.toISOString().split('T')[0];
+        function loadDaysAgo(daysAgo) {
+            const targetDate = new Date();
+            targetDate.setDate(targetDate.getDate() - daysAgo);
+            document.getElementById('date-picker').value = targetDate.toISOString().split('T')[0];
             loadHeartRateData();
         }
         
