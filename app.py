@@ -316,12 +316,11 @@ def get_heart_rate_data():
         # Calculate statistics
         heart_rates = [point['heart_rate'] for point in data]
         stats = {
-            'average': round(sum(heart_rates) / len(heart_rates), 1),
+            'average': round(sum(heart_rates) / len(heart_rates)),  # Round to integer
             'maximum': max(heart_rates),
             'minimum': min(heart_rates),
-            'data_points': len(heart_rates),
             'time_z2': format_time(zone_times['Z2']),
-            'time_z4': format_time(zone_times['Z4'])
+            'time_z4_z5': format_time(zone_times['Z4'] + zone_times['Z5'])  # Combined Z4 and Z5
         }
         
         return jsonify({
