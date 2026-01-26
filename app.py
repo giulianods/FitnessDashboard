@@ -137,12 +137,12 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
             fig.add_hline(
                 y=upper,
                 line_dash="dash",
-                line_color='#CCCCCC',
-                line_width=1,
+                line_color='#999999',
+                line_width=1.5,
                 annotation_text=f"{zone_name} ({int(lower)}-{int(upper)} bpm)",
                 annotation_position="right",
-                annotation_font_size=9,
-                annotation_font_color='#666',
+                annotation_font_size=10,
+                annotation_font_color='#555',
                 row=1, col=1
             )
         else:
@@ -150,12 +150,12 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
             fig.add_hline(
                 y=lower,
                 line_dash="dash",
-                line_color='#CCCCCC',
-                line_width=1,
+                line_color='#999999',
+                line_width=1.5,
                 annotation_text=f"{zone_name} (>{int(lower)} bpm)",
                 annotation_position="right",
-                annotation_font_size=9,
-                annotation_font_color='#666',
+                annotation_font_size=10,
+                annotation_font_color='#555',
                 row=1, col=1
             )
     
