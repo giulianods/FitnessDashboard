@@ -65,13 +65,14 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
     date_str = date_obj.strftime('%A, %b %d, %Y')  # e.g., "Friday, Jan 24, 2026"
     
     # Garmin HR Zones (Z0-Z5) based on max HR
+    # Z0 is below 50%, Z1-Z5 are the training zones
     garmin_zones = {
-        'Z0': (max_hr * 0.50, max_hr * 0.60, 'Warm-up'),
-        'Z1': (max_hr * 0.60, max_hr * 0.70, 'Easy'),
-        'Z2': (max_hr * 0.70, max_hr * 0.80, 'Aerobic'),
-        'Z3': (max_hr * 0.80, max_hr * 0.90, 'Threshold'),
-        'Z4': (max_hr * 0.90, max_hr * 1.00, 'Maximum'),
-        'Z5': (max_hr * 1.00, max_hr * 1.20, 'Peak'),
+        'Z0': (0, max_hr * 0.50, 'Rest'),  # Zone 0: <50%
+        'Z1': (max_hr * 0.50, max_hr * 0.60, 'Very Light'),  # Zone 1: 50-60%
+        'Z2': (max_hr * 0.60, max_hr * 0.70, 'Light'),  # Zone 2: 60-70%
+        'Z3': (max_hr * 0.70, max_hr * 0.80, 'Moderate'),  # Zone 3: 70-80%
+        'Z4': (max_hr * 0.80, max_hr * 0.90, 'Hard'),  # Zone 4: 80-90%
+        'Z5': (max_hr * 0.90, max_hr * 1.00, 'Maximum'),  # Zone 5: 90-100%
     }
     
     # Filter data for waking hours (6:00-22:00)
@@ -85,16 +86,12 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
     
     # Calculate zone distribution for waking hours
     zone_distribution = {zone: 0 for zone in garmin_zones.keys()}
-    below_z0_count = 0  # Count for HR below Zone 0 (below 50% max HR)
     
     for hr in waking_hours_hr:
-        if hr < max_hr * 0.50:
-            below_z0_count += 1
-        else:
-            for zone_name, (lower, upper, _) in garmin_zones.items():
-                if lower <= hr < upper:
-                    zone_distribution[zone_name] += 1
-                    break
+        for zone_name, (lower, upper, _) in garmin_zones.items():
+            if lower <= hr < upper:
+                zone_distribution[zone_name] += 1
+                break
     
     # Convert counts to time in minutes
     # Calculate time based on proportion of data points in each zone
@@ -111,12 +108,6 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
         else:
             zone_times[zone] = 0
     
-    # Calculate time below Z0
-    if total_waking_points > 0:
-        below_z0_time = (below_z0_count / total_waking_points) * WAKING_HOURS_DURATION
-    else:
-        below_z0_time = 0
-    
     # Create subplots: 1 row with main chart on top, 2 charts below
     fig = make_subplots(
         rows=2, cols=2,
@@ -128,9 +119,6 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
         vertical_spacing=0.12,
         horizontal_spacing=0.1
     )
-    
-    # Add cardio zone lines to main chart
-    zone_colors = ['#90EE90', '#FFD700', '#FFA500', '#FF6347', '#DC143C', '#8B0000']
     
     # Add heart rate trace (light blue color) to main chart
     fig.add_trace(go.Scatter(
@@ -146,44 +134,34 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
     
     # Add horizontal zone lines AFTER the trace so they appear on top
     for idx, (zone_name, (lower, upper, desc)) in enumerate(garmin_zones.items()):
-        # Add horizontal line at the upper boundary (except for the last zone)
-        if idx < len(garmin_zones) - 1:
-            fig.add_hline(
-                y=upper,
-                line_dash="solid",  # Changed to solid for better visibility
-                line_color='#000000',  # Black for maximum visibility
-                line_width=2,  # Thicker line
-                annotation_text=f"{zone_name} ({int(lower)}-{int(upper)} bpm)",
-                annotation_position="right",
-                annotation_font_size=11,
-                annotation_font_color='#000000',
-                row=1, col=1
-            )
-        else:
-            # For the last zone (open-ended), add annotation at the lower boundary
-            fig.add_hline(
-                y=lower,
-                line_dash="solid",
-                line_color='#000000',
-                line_width=2,
-                annotation_text=f"{zone_name} (>{int(lower)} bpm)",
-                annotation_position="right",
-                annotation_font_size=11,
-                annotation_font_color='#000000',
-                row=1, col=1
-            )
+        # Skip Z0 (rest zone) from being drawn as it starts at 0
+        if zone_name == 'Z0':
+            continue
+        # Add horizontal line at the lower boundary of each zone (except Z0)
+        fig.add_hline(
+            y=lower,
+            line_dash="solid",  # Solid for better visibility
+            line_color='#000000',  # Black for maximum visibility
+            line_width=2,  # Thicker line
+            annotation_text=f"{zone_name} ({int(lower)}-{int(upper)} bpm)",
+            annotation_position="right",
+            annotation_font_size=11,
+            annotation_font_color='#000000',
+            row=1, col=1
+        )
     
-    # Add horizontal bar chart for zone distribution (with Below Z0)
-    zone_names = ['Below Z0'] + list(garmin_zones.keys())
-    zone_time_values = [below_z0_time] + [zone_times[z] for z in garmin_zones.keys()]
-    zone_labels = ['Below Z0 (<50%)'] + [f"{z} - {garmin_zones[z][2]}" for z in garmin_zones.keys()]
-    zone_colors_with_below = ['#B0C4DE'] + zone_colors  # Light steel blue for below Z0
+    # Add horizontal bar chart for zone distribution
+    zone_names = list(garmin_zones.keys())
+    zone_time_values = [zone_times[z] for z in garmin_zones.keys()]
+    zone_labels = [f"{z} - {garmin_zones[z][2]}" for z in garmin_zones.keys()]
+    # Updated colors for Z0-Z5: gray for rest, then green->yellow->orange->red->dark red
+    zone_colors_bar = ['#A9A9A9', '#90EE90', '#FFD700', '#FFA500', '#FF6347', '#DC143C']
     
     fig.add_trace(go.Bar(
         y=zone_labels,
         x=zone_time_values,
         orientation='h',
-        marker=dict(color=zone_colors_with_below),
+        marker=dict(color=zone_colors_bar),
         text=[format_time(t) for t in zone_time_values],
         textposition='auto',
         showlegend=False
@@ -364,8 +342,8 @@ def get_heart_rate_data():
             'average': round(sum(heart_rates) / len(heart_rates)),  # Round to integer
             'maximum': max(heart_rates),
             'minimum': min(heart_rates),
-            'time_z2': format_time(zone_times['Z2']),
-            'time_z4_z5': format_time(zone_times['Z4'] + zone_times['Z5'])  # Combined Z4 and Z5
+            'time_z2': format_time(zone_times['Z2']),  # Z2: 60-70% (Light)
+            'time_z4_z5': format_time(zone_times['Z4'] + zone_times['Z5'])  # Z4: 80-90% + Z5: 90-100%
         }
         
         return jsonify({
