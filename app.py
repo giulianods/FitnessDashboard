@@ -131,33 +131,6 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
     
     # Add cardio zone lines to main chart
     zone_colors = ['#90EE90', '#FFD700', '#FFA500', '#FF6347', '#DC143C', '#8B0000']
-    for idx, (zone_name, (lower, upper, desc)) in enumerate(garmin_zones.items()):
-        # Add horizontal line at the upper boundary (except for the last zone)
-        if idx < len(garmin_zones) - 1:
-            fig.add_hline(
-                y=upper,
-                line_dash="dash",
-                line_color='#999999',
-                line_width=1.5,
-                annotation_text=f"{zone_name} ({int(lower)}-{int(upper)} bpm)",
-                annotation_position="right",
-                annotation_font_size=10,
-                annotation_font_color='#555',
-                row=1, col=1
-            )
-        else:
-            # For the last zone (open-ended), add annotation at the lower boundary
-            fig.add_hline(
-                y=lower,
-                line_dash="dash",
-                line_color='#999999',
-                line_width=1.5,
-                annotation_text=f"{zone_name} (>{int(lower)} bpm)",
-                annotation_position="right",
-                annotation_font_size=10,
-                annotation_font_color='#555',
-                row=1, col=1
-            )
     
     # Add heart rate trace (light blue color) to main chart
     fig.add_trace(go.Scatter(
@@ -170,6 +143,35 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
         fillcolor='rgba(74, 144, 226, 0.2)',
         showlegend=False
     ), row=1, col=1)
+    
+    # Add horizontal zone lines AFTER the trace so they appear on top
+    for idx, (zone_name, (lower, upper, desc)) in enumerate(garmin_zones.items()):
+        # Add horizontal line at the upper boundary (except for the last zone)
+        if idx < len(garmin_zones) - 1:
+            fig.add_hline(
+                y=upper,
+                line_dash="solid",  # Changed to solid for better visibility
+                line_color='#000000',  # Black for maximum visibility
+                line_width=2,  # Thicker line
+                annotation_text=f"{zone_name} ({int(lower)}-{int(upper)} bpm)",
+                annotation_position="right",
+                annotation_font_size=11,
+                annotation_font_color='#000000',
+                row=1, col=1
+            )
+        else:
+            # For the last zone (open-ended), add annotation at the lower boundary
+            fig.add_hline(
+                y=lower,
+                line_dash="solid",
+                line_color='#000000',
+                line_width=2,
+                annotation_text=f"{zone_name} (>{int(lower)} bpm)",
+                annotation_position="right",
+                annotation_font_size=11,
+                annotation_font_color='#000000',
+                row=1, col=1
+            )
     
     # Add horizontal bar chart for zone distribution (with Below Z0)
     zone_names = ['Below Z0'] + list(garmin_zones.keys())
