@@ -372,7 +372,7 @@
             document.querySelectorAll('.menu-item').forEach(item => {
                 item.classList.remove('active');
             });
-            event.target.classList.add('active');
+            event.currentTarget.classList.add('active');
             
             // Update views
             document.querySelectorAll('.view').forEach(v => {
@@ -383,7 +383,8 @@
                 document.getElementById('daily-view').classList.add('active');
             } else if (view === 'historical') {
                 document.getElementById('historical-view').classList.add('active');
-                loadHistoricalData(currentWeeks);
+                // Load historical data without requiring event parameter
+                loadHistoricalDataInitial(currentWeeks);
             }
         }
         
@@ -464,8 +465,12 @@
             document.querySelectorAll('.period-btn').forEach(btn => {
                 btn.classList.remove('active');
             });
-            event.target.classList.add('active');
+            event.currentTarget.classList.add('active');
             
+            loadHistoricalDataInitial(weeks);
+        }
+        
+        function loadHistoricalDataInitial(weeks) {
             // Show loading
             document.getElementById('historical-chart').innerHTML = `
                 <div class="loading">

@@ -521,7 +521,7 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR):
             
             # Add annotation with stats
             lognorm_mean_original = lognorm_mean + min_hr
-            lognorm_stats_text = f'Resting HR: {min_hr:.0f} bpm<br>μ = {lognorm_mean_original:.1f} bpm<br>σ = {lognorm_std:.1f} bpm'
+            lognorm_stats_text = f'Min Waking HR: {min_hr:.0f} bpm<br>μ = {lognorm_mean_original:.1f} bpm<br>σ = {lognorm_std:.1f} bpm'
             fig.add_annotation(
                 text=lognorm_stats_text,
                 xref='x3',
