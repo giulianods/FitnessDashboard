@@ -678,6 +678,93 @@ def get_historical_data():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/get_monthly_data')
+def get_monthly_data():
+    """API endpoint to get historical heart rate data for a specific month"""
+    year_str = request.args.get('year')
+    month_str = request.args.get('month')
+    
+    if not year_str or not month_str:
+        return jsonify({'error': 'Year and month parameters are required'}), 400
+    
+    try:
+        year = int(year_str)
+        month = int(month_str)
+        
+        if month < 1 or month > 12:
+            return jsonify({'error': 'Invalid month. Must be between 1 and 12'}), 400
+        
+        if year < 2000 or year > 2100:
+            return jsonify({'error': 'Invalid year'}), 400
+        
+        # Get Garmin client
+        client = get_garmin_client()
+        
+        # Calculate first and last day of the month
+        start_date = datetime(year, month, 1)
+        
+        # Calculate last day of month
+        if month == 12:
+            end_date = datetime(year + 1, 1, 1) - timedelta(days=1)
+        else:
+            end_date = datetime(year, month + 1, 1) - timedelta(days=1)
+        
+        # Fetch data for all days in the month
+        month_data = {}
+        all_heart_rates = []
+        
+        current_date = start_date
+        while current_date <= end_date:
+            date_str = current_date.strftime('%Y-%m-%d')
+            try:
+                hr_data = client.get_heart_rate_data(current_date)
+                hrv_data = client.get_hrv_data(current_date)
+                
+                if hr_data:
+                    month_data[date_str] = {
+                        'hr_data': hr_data,
+                        'hrv': hrv_data
+                    }
+                    all_heart_rates.extend([point['heart_rate'] for point in hr_data])
+            except Exception as e:
+                print(f"Warning: Could not fetch data for {date_str}: {e}")
+            
+            current_date += timedelta(days=1)
+        
+        if not month_data:
+            month_names = ['January', 'February', 'March', 'April', 'May', 'June',
+                          'July', 'August', 'September', 'October', 'November', 'December']
+            return jsonify({
+                'error': f'No heart rate data found for {month_names[month-1]} {year}',
+                'message': 'No activity was recorded in this month or data has not synced yet'
+            }), 404
+        
+        # Create historical chart JSON (reuse the same function)
+        chart_json, zone_times = create_historical_chart_json(month_data)
+        
+        # Calculate statistics for the entire month
+        stats = {
+            'average': round(sum(all_heart_rates) / len(all_heart_rates)),
+            'maximum': max(all_heart_rates),
+            'minimum': min(all_heart_rates),
+            'time_z2': format_time(zone_times['Z2']),
+            'time_z4_z5': format_time(zone_times['Z4'] + zone_times['Z5'])
+        }
+        
+        return jsonify({
+            'chart': chart_json,
+            'stats': stats,
+            'year': year,
+            'month': month,
+            'days_with_data': len(month_data)
+        })
+        
+    except ValueError:
+        return jsonify({'error': 'Invalid year or month parameter'}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 if __name__ == '__main__':
     import os
     print("Starting Fitness Dashboard Web App...")

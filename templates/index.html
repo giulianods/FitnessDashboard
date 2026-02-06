@@ -285,6 +285,9 @@
         <div class="menu-item" onclick="switchView('historical', event)" title="Historical Trends">
             📊
         </div>
+        <div class="menu-item" onclick="switchView('monthly', event)" title="Monthly View">
+            📆
+        </div>
     </div>
     
     <div class="container">
@@ -347,6 +350,29 @@
                 </div>
             </div>
         </div>
+        
+        <!-- Monthly View -->
+        <div id="monthly-view" class="view">
+            <div class="controls">
+                <div class="period-picker-container">
+                    <label>Select Month:</label>
+                    <div id="month-buttons">
+                        <!-- Month buttons will be generated dynamically -->
+                    </div>
+                </div>
+            </div>
+            
+            <div id="monthly-stats-container"></div>
+            
+            <div class="chart-container">
+                <div id="monthly-chart">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <p>Select a month to view data...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
     
     <script>
@@ -385,6 +411,10 @@
                 document.getElementById('historical-view').classList.add('active');
                 // Load historical data without requiring event parameter
                 loadHistoricalDataInitial(currentWeeks);
+            } else if (view === 'monthly') {
+                document.getElementById('monthly-view').classList.add('active');
+                // Generate month buttons and load first month
+                generateMonthButtons();
             }
         }
         
@@ -579,6 +609,132 @@
                 </div>
             `;
             document.getElementById('historical-stats-container').innerHTML = statsHtml;
+        }
+        
+        // Monthly view functions
+        function generateMonthButtons() {
+            const monthButtonsContainer = document.getElementById('month-buttons');
+            const today = new Date();
+            let html = '';
+            
+            // Generate buttons for last 6 months (including current month)
+            for (let i = 0; i < 6; i++) {
+                const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
+                const year = date.getFullYear();
+                const month = date.getMonth() + 1; // 0-indexed, so add 1
+                const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+                                   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                const monthName = monthNames[date.getMonth()];
+                const yearShort = String(year).slice(-2); // Get last 2 digits
+                const label = `${monthName} '${yearShort}`;
+                const activeClass = i === 0 ? ' active' : '';
+                
+                html += `<button class="period-btn${activeClass}" onclick="loadMonthlyData(${year}, ${month}, event)">${label}</button>`;
+            }
+            
+            monthButtonsContainer.innerHTML = html;
+            
+            // Load data for the first month (current month)
+            const currentYear = today.getFullYear();
+            const currentMonth = today.getMonth() + 1;
+            loadMonthlyDataInitial(currentYear, currentMonth);
+        }
+        
+        function loadMonthlyData(year, month, event) {
+            // Update active button
+            document.querySelectorAll('#month-buttons .period-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.currentTarget.classList.add('active');
+            
+            loadMonthlyDataInitial(year, month);
+        }
+        
+        function loadMonthlyDataInitial(year, month) {
+            const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+                               'July', 'August', 'September', 'October', 'November', 'December'];
+            const monthName = monthNames[month - 1];
+            
+            // Show loading
+            document.getElementById('monthly-chart').innerHTML = `
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Loading data for ${monthName} ${year}...</p>
+                </div>
+            `;
+            document.getElementById('monthly-stats-container').innerHTML = '';
+            
+            // Fetch monthly data
+            fetch(`/get_monthly_data?year=${year}&month=${month}`)
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(err => {
+                            throw new Error(err.error || 'Failed to load data');
+                        });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // Parse chart data
+                    const chartData = JSON.parse(data.chart);
+                    
+                    // Clear the chart div first
+                    document.getElementById('monthly-chart').innerHTML = '';
+                    
+                    // Display chart
+                    Plotly.newPlot('monthly-chart', chartData.data, chartData.layout, {
+                        responsive: true,
+                        displayModeBar: true,
+                        displaylogo: false
+                    });
+                    
+                    // Display statistics
+                    displayMonthlyStats(data.stats);
+                })
+                .catch(error => {
+                    document.getElementById('monthly-chart').innerHTML = `
+                        <div class="error">
+                            <h3>⚠️ Error Loading Monthly Data</h3>
+                            <p>${error.message}</p>
+                            <p style="margin-top: 10px; font-size: 0.9em;">
+                                This could mean:<br>
+                                • No activity was recorded in this month<br>
+                                • Your Garmin device was not worn<br>
+                                • The data has not synced yet<br>
+                                • Invalid credentials in config.json
+                            </p>
+                        </div>
+                    `;
+                    console.error('Error:', error);
+                });
+        }
+        
+        function displayMonthlyStats(stats) {
+            const statsHtml = `
+                <div class="stats">
+                    <div class="stat-card">
+                        <h3>Average Heart Rate</h3>
+                        <p>${stats.average} bpm</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Maximum Heart Rate</h3>
+                        <p>${stats.maximum} bpm</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Minimum Heart Rate</h3>
+                        <p>${stats.minimum} bpm</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Time in Z2</h3>
+                        <p>${stats.time_z2}</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Time in Z4+5</h3>
+                        <p>${stats.time_z4_z5}</p>
+                    </div>
+                </div>
+            `;
+            document.getElementById('monthly-stats-container').innerHTML = statsHtml;
         }
     </script>
 </body>
