@@ -47,3 +47,7 @@ test_heart_rate_chart.html
 # Flask
 instance/
 .webassets-cache
+
+# Cache
+data/
+*.db
