@@ -111,3 +111,51 @@ class GarminClient:
         """
         yesterday = datetime.now() - timedelta(days=1)
         return self.get_heart_rate_data(yesterday)
+    
+    def get_hrv_data(self, date: datetime) -> Optional[float]:
+        """
+        Get HRV (Heart Rate Variability) data for a specific date
+        
+        Args:
+            date: Date to retrieve HRV data for
+            
+        Returns:
+            HRV value (nightly average) or None if not available
+        """
+        if not self.client:
+            raise Exception("Not logged in. Call login() first")
+        
+        try:
+            date_str = date.strftime('%Y-%m-%d')
+            print(f"Fetching HRV data for {date_str}...")
+            
+            # Get HRV data using get_hrv_data method from garminconnect
+            hrv_data = self.client.get_hrv_data(date_str)
+            
+            if not hrv_data:
+                print(f"No HRV data found for {date_str}")
+                return None
+            
+            # Extract the weekly average HRV or last night's HRV
+            # The API returns various HRV metrics
+            hrv_value = None
+            
+            # Try to get last night's HRV value
+            if isinstance(hrv_data, dict):
+                # Check for lastNightAvg (most relevant for nightly HRV)
+                hrv_value = hrv_data.get('lastNightAvg')
+                
+                # Fallback to weeklyAvg if lastNightAvg not available
+                if hrv_value is None:
+                    hrv_value = hrv_data.get('weeklyAvg')
+            
+            if hrv_value is not None:
+                print(f"Retrieved HRV value: {hrv_value}")
+            else:
+                print(f"No HRV value found for {date_str}")
+                
+            return hrv_value
+            
+        except Exception as e:
+            print(f"Failed to get HRV data for {date.strftime('%Y-%m-%d')}: {e}")
+            return None

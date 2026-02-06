@@ -360,17 +360,18 @@ def get_heart_rate_data():
 
 def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR):
     """
-    Create chart JSON for historical trends with 3 subplots:
+    Create chart JSON for historical trends with 4 subplots:
     - Chart A: Daily min/max heart rate over time
     - Chart B: Aggregated time in each zone
     - Chart C: Aggregated heart rate distribution with lognormal fit
+    - Chart D: Daily HRV (Heart Rate Variability)
     
     Args:
-        weeks_data: Dictionary with dates as keys and list of HR data points as values
+        weeks_data: Dictionary with dates as keys and dict with 'hr_data' and 'hrv' as values
         max_hr: Maximum heart rate for calculating cardio zones
     
     Returns:
-        JSON string for Plotly chart
+        JSON string for Plotly chart and zone times
     """
     if not weeks_data:
         return None, None
@@ -385,10 +386,11 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR):
         'Z5': (max_hr * 0.90, max_hr * 1.00, 'Maximum'),
     }
     
-    # Prepare data for min/max chart
+    # Prepare data for min/max chart and HRV chart
     dates = []
     daily_mins = []
     daily_maxs = []
+    daily_hrvs = []
     
     # Aggregate all heart rates for distribution
     all_waking_hrs = []
@@ -397,7 +399,17 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR):
     total_zone_times = {zone: 0 for zone in garmin_zones.keys()}
     
     for date_str in sorted(weeks_data.keys()):
-        data = weeks_data[date_str]
+        entry = weeks_data[date_str]
+        
+        # Handle both old format (list) and new format (dict)
+        if isinstance(entry, dict):
+            data = entry.get('hr_data', [])
+            hrv_value = entry.get('hrv')
+        else:
+            # Backward compatibility: treat as HR data list
+            data = entry
+            hrv_value = None
+            
         if not data:
             continue
             
@@ -405,6 +417,12 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR):
         dates.append(date_str)
         daily_mins.append(min(heart_rates))
         daily_maxs.append(max(heart_rates))
+        
+        # Add HRV value if available
+        if hrv_value is not None:
+            daily_hrvs.append(hrv_value)
+        else:
+            daily_hrvs.append(None)
         
         # Filter waking hours data (6:00-22:00)
         waking_hours_data = []
@@ -433,7 +451,7 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR):
         else:
             total_zone_times[zone] = 0
     
-    # Create subplots
+    # Create subplots - 2x2 grid
     fig = make_subplots(
         rows=2, cols=2,
         row_heights=[0.5, 0.5],
@@ -441,23 +459,24 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR):
         subplot_titles=(
             'Daily Min/Max Heart Rate',
             'Time in Each Zone',
-            'Heart Rate Distribution',
-            ''
+            'Daily HRV',
+            'Heart Rate Distribution'
         ),
         specs=[[{}, {}],
-               [{'colspan': 2}, None]],
+               [{}, {}]],
         vertical_spacing=0.12,
         horizontal_spacing=0.1
     )
     
-    # Chart A: Daily min/max heart rate
+    # Chart A: Daily min/max heart rate (no legend)
     fig.add_trace(go.Scatter(
         x=dates,
         y=daily_mins,
         mode='lines+markers',
         name='Min HR',
         line=dict(color='#4A90E2', width=2),
-        marker=dict(size=6)
+        marker=dict(size=6),
+        showlegend=False
     ), row=1, col=1)
     
     fig.add_trace(go.Scatter(
@@ -466,7 +485,8 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR):
         mode='lines+markers',
         name='Max HR',
         line=dict(color='#FF6347', width=2),
-        marker=dict(size=6)
+        marker=dict(size=6),
+        showlegend=False
     ), row=1, col=1)
     
     # Chart B: Time in each zone (horizontal bar chart)
@@ -485,7 +505,23 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR):
         showlegend=False
     ), row=1, col=2)
     
-    # Chart C: Heart rate distribution with lognormal fit
+    # Chart D: Daily HRV (positioned at row 2, col 1)
+    # Filter out None values for plotting
+    hrv_dates = [dates[i] for i in range(len(dates)) if daily_hrvs[i] is not None]
+    hrv_values = [v for v in daily_hrvs if v is not None]
+    
+    if hrv_values:
+        fig.add_trace(go.Scatter(
+            x=hrv_dates,
+            y=hrv_values,
+            mode='lines+markers',
+            name='HRV',
+            line=dict(color='#9B59B6', width=2),
+            marker=dict(size=6),
+            showlegend=False
+        ), row=2, col=1)
+    
+    # Chart C: Heart rate distribution with lognormal fit (positioned at row 2, col 2)
     if all_waking_hrs:
         fig.add_trace(go.Histogram(
             x=all_waking_hrs,
@@ -494,7 +530,7 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR):
             showlegend=False,
             name='HR Distribution',
             histnorm='probability density'
-        ), row=2, col=1)
+        ), row=2, col=2)
         
         # Fit lognormal distribution
         min_hr = min(all_waking_hrs)
@@ -517,15 +553,15 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR):
                 line=dict(color='#FF6347', width=2.5, dash='solid'),
                 name='Lognormal Fit',
                 showlegend=False
-            ), row=2, col=1)
+            ), row=2, col=2)
             
             # Add annotation with stats
             lognorm_mean_original = lognorm_mean + min_hr
             lognorm_stats_text = f'Min Waking HR: {min_hr:.0f} bpm<br>μ = {lognorm_mean_original:.1f} bpm<br>σ = {lognorm_std:.1f} bpm'
             fig.add_annotation(
                 text=lognorm_stats_text,
-                xref='x3',
-                yref='y3',
+                xref='x4',
+                yref='y4',
                 x=max_hr * 0.75,
                 y=max(y_fit) * 0.85,
                 showarrow=False,
@@ -534,8 +570,7 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR):
                 bordercolor='#FF6347',
                 borderwidth=1.5,
                 borderpad=4,
-                align='left',
-                row=2, col=1
+                align='left'
             )
     
     # Update layout
@@ -551,19 +586,24 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR):
         font=dict(family='Arial, sans-serif', size=11, color='#333'),
         height=700,
         margin=dict(l=60, r=60, t=80, b=60),
-        showlegend=True,
-        legend=dict(x=0.02, y=0.98)
+        showlegend=False
     )
     
-    # Update axes
+    # Update axes for Chart A (row 1, col 1)
     fig.update_xaxes(title_text='Date', showgrid=True, gridcolor='#E0E0E0', row=1, col=1)
     fig.update_yaxes(title_text='Heart Rate (bpm)', showgrid=True, gridcolor='#E0E0E0', row=1, col=1)
     
+    # Update axes for Chart B (row 1, col 2)
     fig.update_xaxes(title_text='Time', showgrid=True, gridcolor='#E0E0E0', row=1, col=2)
     fig.update_yaxes(title_text='', row=1, col=2)
     
-    fig.update_xaxes(title_text='Heart Rate (bpm)', showgrid=True, gridcolor='#E0E0E0', range=[0, max_hr], row=2, col=1)
-    fig.update_yaxes(title_text='Frequency', showgrid=True, gridcolor='#E0E0E0', row=2, col=1)
+    # Update axes for Chart D - HRV (row 2, col 1)
+    fig.update_xaxes(title_text='Date', showgrid=True, gridcolor='#E0E0E0', row=2, col=1)
+    fig.update_yaxes(title_text='HRV (ms)', showgrid=True, gridcolor='#E0E0E0', row=2, col=1)
+    
+    # Update axes for Chart C - Distribution (row 2, col 2)
+    fig.update_xaxes(title_text='Heart Rate (bpm)', showgrid=True, gridcolor='#E0E0E0', range=[0, max_hr], row=2, col=2)
+    fig.update_yaxes(title_text='Frequency', showgrid=True, gridcolor='#E0E0E0', row=2, col=2)
     
     return json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder), total_zone_times
 
@@ -591,10 +631,15 @@ def get_historical_data():
         while current_date <= end_date:
             date_str = current_date.strftime('%Y-%m-%d')
             try:
-                data = client.get_heart_rate_data(current_date)
-                if data:
-                    weeks_data[date_str] = data
-                    all_heart_rates.extend([point['heart_rate'] for point in data])
+                hr_data = client.get_heart_rate_data(current_date)
+                hrv_data = client.get_hrv_data(current_date)
+                
+                if hr_data:
+                    weeks_data[date_str] = {
+                        'hr_data': hr_data,
+                        'hrv': hrv_data
+                    }
+                    all_heart_rates.extend([point['heart_rate'] for point in hr_data])
             except Exception as e:
                 print(f"Warning: Could not fetch data for {date_str}: {e}")
             
