@@ -358,6 +358,279 @@ def get_heart_rate_data():
         return jsonify({'error': str(e)}), 500
 
 
+def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR):
+    """
+    Create chart JSON for historical trends with 3 subplots:
+    - Chart A: Daily min/max heart rate over time
+    - Chart B: Aggregated time in each zone
+    - Chart C: Aggregated heart rate distribution with lognormal fit
+    
+    Args:
+        weeks_data: Dictionary with dates as keys and list of HR data points as values
+        max_hr: Maximum heart rate for calculating cardio zones
+    
+    Returns:
+        JSON string for Plotly chart
+    """
+    if not weeks_data:
+        return None
+    
+    # Garmin HR Zones
+    garmin_zones = {
+        'Z0': (0, max_hr * 0.50, 'Rest'),
+        'Z1': (max_hr * 0.50, max_hr * 0.60, 'Very Light'),
+        'Z2': (max_hr * 0.60, max_hr * 0.70, 'Light'),
+        'Z3': (max_hr * 0.70, max_hr * 0.80, 'Moderate'),
+        'Z4': (max_hr * 0.80, max_hr * 0.90, 'Hard'),
+        'Z5': (max_hr * 0.90, max_hr * 1.00, 'Maximum'),
+    }
+    
+    # Prepare data for min/max chart
+    dates = []
+    daily_mins = []
+    daily_maxs = []
+    
+    # Aggregate all heart rates for distribution
+    all_waking_hrs = []
+    
+    # Aggregate zone times
+    total_zone_times = {zone: 0 for zone in garmin_zones.keys()}
+    
+    for date_str in sorted(weeks_data.keys()):
+        data = weeks_data[date_str]
+        if not data:
+            continue
+            
+        heart_rates = [point['heart_rate'] for point in data]
+        dates.append(date_str)
+        daily_mins.append(min(heart_rates))
+        daily_maxs.append(max(heart_rates))
+        
+        # Filter waking hours data (6:00-22:00)
+        waking_hours_data = []
+        for point in data:
+            hour = point['timestamp'].hour
+            if 6 <= hour < 22:
+                waking_hours_data.append(point)
+                all_waking_hrs.append(point['heart_rate'])
+        
+        # Calculate zone distribution for this day
+        waking_hours_hr = [point['heart_rate'] for point in waking_hours_data]
+        for hr in waking_hours_hr:
+            for zone_name, (lower, upper, _) in garmin_zones.items():
+                if lower <= hr < upper:
+                    total_zone_times[zone_name] += 1
+                    break
+    
+    # Convert zone counts to time (proportional to total waking hours)
+    total_waking_points = sum(total_zone_times.values())
+    for zone in total_zone_times:
+        if total_waking_points > 0:
+            # Each day has 16 hours * 60 minutes = 960 minutes of waking hours
+            # Scale by number of days
+            time_minutes = (total_zone_times[zone] / total_waking_points) * WAKING_HOURS_DURATION * len(dates)
+            total_zone_times[zone] = time_minutes
+        else:
+            total_zone_times[zone] = 0
+    
+    # Create subplots
+    fig = make_subplots(
+        rows=2, cols=2,
+        row_heights=[0.5, 0.5],
+        column_widths=[0.5, 0.5],
+        subplot_titles=(
+            'Daily Min/Max Heart Rate',
+            'Time in Each Zone',
+            'Heart Rate Distribution',
+            ''
+        ),
+        specs=[[{}, {}],
+               [{'colspan': 2}, None]],
+        vertical_spacing=0.12,
+        horizontal_spacing=0.1
+    )
+    
+    # Chart A: Daily min/max heart rate
+    fig.add_trace(go.Scatter(
+        x=dates,
+        y=daily_mins,
+        mode='lines+markers',
+        name='Min HR',
+        line=dict(color='#4A90E2', width=2),
+        marker=dict(size=6)
+    ), row=1, col=1)
+    
+    fig.add_trace(go.Scatter(
+        x=dates,
+        y=daily_maxs,
+        mode='lines+markers',
+        name='Max HR',
+        line=dict(color='#FF6347', width=2),
+        marker=dict(size=6)
+    ), row=1, col=1)
+    
+    # Chart B: Time in each zone (horizontal bar chart)
+    zone_names = list(garmin_zones.keys())
+    zone_time_values = [total_zone_times[z] for z in zone_names]
+    zone_labels = [f"{z} - {garmin_zones[z][2]}" for z in zone_names]
+    zone_colors = ['#A9A9A9', '#90EE90', '#FFD700', '#FFA500', '#FF6347', '#DC143C']
+    
+    fig.add_trace(go.Bar(
+        y=zone_labels,
+        x=zone_time_values,
+        orientation='h',
+        marker=dict(color=zone_colors),
+        text=[format_time(t) for t in zone_time_values],
+        textposition='auto',
+        showlegend=False
+    ), row=1, col=2)
+    
+    # Chart C: Heart rate distribution with lognormal fit
+    if all_waking_hrs:
+        fig.add_trace(go.Histogram(
+            x=all_waking_hrs,
+            nbinsx=50,
+            marker=dict(color='#4A90E2', line=dict(color='white', width=1)),
+            showlegend=False,
+            name='HR Distribution',
+            histnorm='probability density'
+        ), row=2, col=1)
+        
+        # Fit lognormal distribution
+        min_hr = min(all_waking_hrs)
+        hr_shifted = [hr - min_hr for hr in all_waking_hrs]
+        hr_positive_shifted = [hr for hr in hr_shifted if hr > 0]
+        
+        if hr_positive_shifted:
+            shape, loc, scale = stats.lognorm.fit(hr_positive_shifted, floc=0)
+            lognorm_mean = scale * np.exp(shape**2 / 2)
+            lognorm_std = scale * np.sqrt((np.exp(shape**2) - 1) * np.exp(shape**2))
+            
+            x_fit_shifted = np.linspace(0, max_hr - min_hr, 200)
+            y_fit = stats.lognorm.pdf(x_fit_shifted, shape, loc, scale)
+            x_fit = x_fit_shifted + min_hr
+            
+            fig.add_trace(go.Scatter(
+                x=x_fit,
+                y=y_fit,
+                mode='lines',
+                line=dict(color='#FF6347', width=2.5, dash='solid'),
+                name='Lognormal Fit',
+                showlegend=False
+            ), row=2, col=1)
+            
+            # Add annotation with stats
+            lognorm_mean_original = lognorm_mean + min_hr
+            lognorm_stats_text = f'Resting HR: {min_hr:.0f} bpm<br>μ = {lognorm_mean_original:.1f} bpm<br>σ = {lognorm_std:.1f} bpm'
+            fig.add_annotation(
+                text=lognorm_stats_text,
+                xref='x3',
+                yref='y3',
+                x=max_hr * 0.75,
+                y=max(y_fit) * 0.85,
+                showarrow=False,
+                font=dict(size=11, color='#FF6347', family='Arial'),
+                bgcolor='rgba(255, 255, 255, 0.8)',
+                bordercolor='#FF6347',
+                borderwidth=1.5,
+                borderpad=4,
+                align='left',
+                row=2, col=1
+            )
+    
+    # Update layout
+    fig.update_layout(
+        title={
+            'text': f'Historical Trends - Last {len(dates)} Days',
+            'x': 0.5,
+            'xanchor': 'center',
+            'font': {'size': 20, 'color': '#333'}
+        },
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+        font=dict(family='Arial, sans-serif', size=11, color='#333'),
+        height=700,
+        margin=dict(l=60, r=60, t=80, b=60),
+        showlegend=True,
+        legend=dict(x=0.02, y=0.98)
+    )
+    
+    # Update axes
+    fig.update_xaxes(title_text='Date', showgrid=True, gridcolor='#E0E0E0', row=1, col=1)
+    fig.update_yaxes(title_text='Heart Rate (bpm)', showgrid=True, gridcolor='#E0E0E0', row=1, col=1)
+    
+    fig.update_xaxes(title_text='Time', showgrid=True, gridcolor='#E0E0E0', row=1, col=2)
+    fig.update_yaxes(title_text='', row=1, col=2)
+    
+    fig.update_xaxes(title_text='Heart Rate (bpm)', showgrid=True, gridcolor='#E0E0E0', range=[0, max_hr], row=2, col=1)
+    fig.update_yaxes(title_text='Frequency', showgrid=True, gridcolor='#E0E0E0', row=2, col=1)
+    
+    return json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder), total_zone_times
+
+
+@app.route('/get_historical_data')
+def get_historical_data():
+    """API endpoint to get historical heart rate data for multiple weeks"""
+    weeks_str = request.args.get('weeks', '4')
+    
+    try:
+        weeks = int(weeks_str)
+        if weeks not in [4, 8, 12, 16, 24, 48]:
+            return jsonify({'error': 'Invalid weeks parameter. Must be 4, 8, 12, 16, 24, or 48'}), 400
+        
+        # Get Garmin client
+        client = get_garmin_client()
+        
+        # Fetch data for the last N weeks (excluding today)
+        weeks_data = {}
+        all_heart_rates = []
+        end_date = datetime.now() - timedelta(days=1)  # Exclude today
+        start_date = end_date - timedelta(weeks=weeks)
+        
+        current_date = start_date
+        while current_date <= end_date:
+            date_str = current_date.strftime('%Y-%m-%d')
+            try:
+                data = client.get_heart_rate_data(current_date)
+                if data:
+                    weeks_data[date_str] = data
+                    all_heart_rates.extend([point['heart_rate'] for point in data])
+            except Exception as e:
+                print(f"Warning: Could not fetch data for {date_str}: {e}")
+            
+            current_date += timedelta(days=1)
+        
+        if not weeks_data:
+            return jsonify({
+                'error': f'No heart rate data found for the last {weeks} weeks',
+                'message': 'No activity was recorded in this period or data has not synced yet'
+            }), 404
+        
+        # Create historical chart JSON
+        chart_json, zone_times = create_historical_chart_json(weeks_data)
+        
+        # Calculate statistics for the entire period
+        stats = {
+            'average': round(sum(all_heart_rates) / len(all_heart_rates)),
+            'maximum': max(all_heart_rates),
+            'minimum': min(all_heart_rates),
+            'time_z2': format_time(zone_times['Z2']),
+            'time_z4_z5': format_time(zone_times['Z4'] + zone_times['Z5'])
+        }
+        
+        return jsonify({
+            'chart': chart_json,
+            'stats': stats,
+            'weeks': weeks,
+            'days_with_data': len(weeks_data)
+        })
+        
+    except ValueError:
+        return jsonify({'error': 'Invalid weeks parameter. Must be an integer'}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 if __name__ == '__main__':
     import os
     print("Starting Fitness Dashboard Web App...")
