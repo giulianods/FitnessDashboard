@@ -493,7 +493,8 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR):
     zone_names = list(garmin_zones.keys())
     zone_time_values = [total_zone_times[z] for z in zone_names]
     zone_labels = [f"{z} - {garmin_zones[z][2]}" for z in zone_names]
-    zone_colors = ['#A9A9A9', '#90EE90', '#FFD700', '#FFA500', '#FF6347', '#DC143C']
+    # Updated zone colors: Z0=grey, Z1=light blue, Z2=green, Z3=yellow/orange, Z4=red, Z5=dark red
+    zone_colors = ['#808080', '#87CEEB', '#00FF00', '#FFA500', '#FF0000', '#8B0000']
     
     fig.add_trace(go.Bar(
         y=zone_labels,
@@ -590,17 +591,17 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR):
         showlegend=False
     )
     
-    # Update axes for Chart A (row 1, col 1)
-    fig.update_xaxes(title_text='Date', showgrid=True, gridcolor='#E0E0E0', row=1, col=1)
+    # Update axes for Chart A (row 1, col 1) - removed Date label
+    fig.update_xaxes(title_text='', showgrid=True, gridcolor='#E0E0E0', row=1, col=1)
     fig.update_yaxes(title_text='Heart Rate (bpm)', showgrid=True, gridcolor='#E0E0E0', row=1, col=1)
     
     # Update axes for Chart B (row 1, col 2)
     fig.update_xaxes(title_text='Time', showgrid=True, gridcolor='#E0E0E0', row=1, col=2)
     fig.update_yaxes(title_text='', row=1, col=2)
     
-    # Update axes for Chart D - HRV (row 2, col 1)
+    # Update axes for Chart D - HRV (row 2, col 1) - set range to 0-100
     fig.update_xaxes(title_text='Date', showgrid=True, gridcolor='#E0E0E0', row=2, col=1)
-    fig.update_yaxes(title_text='HRV (ms)', showgrid=True, gridcolor='#E0E0E0', row=2, col=1)
+    fig.update_yaxes(title_text='HRV (ms)', showgrid=True, gridcolor='#E0E0E0', range=[0, 100], row=2, col=1)
     
     # Update axes for Chart C - Distribution (row 2, col 2)
     fig.update_xaxes(title_text='Heart Rate (bpm)', showgrid=True, gridcolor='#E0E0E0', range=[0, max_hr], row=2, col=2)
