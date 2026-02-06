@@ -33,40 +33,39 @@ class CacheManager:
     
     def _init_database(self):
         """Initialize SQLite database with required tables"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        # Create heart_rate_data table
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS heart_rate_data (
-                date TEXT PRIMARY KEY,
-                data TEXT NOT NULL,
-                cached_at TEXT NOT NULL
-            )
-        ''')
-        
-        # Create hrv_data table
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS hrv_data (
-                date TEXT PRIMARY KEY,
-                value REAL,
-                cached_at TEXT NOT NULL
-            )
-        ''')
-        
-        # Create index on cached_at for efficient cleanup
-        cursor.execute('''
-            CREATE INDEX IF NOT EXISTS idx_hr_cached_at 
-            ON heart_rate_data(cached_at)
-        ''')
-        
-        cursor.execute('''
-            CREATE INDEX IF NOT EXISTS idx_hrv_cached_at 
-            ON hrv_data(cached_at)
-        ''')
-        
-        conn.commit()
-        conn.close()
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            
+            # Create heart_rate_data table
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS heart_rate_data (
+                    date TEXT PRIMARY KEY,
+                    data TEXT NOT NULL,
+                    cached_at TEXT NOT NULL
+                )
+            ''')
+            
+            # Create hrv_data table
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS hrv_data (
+                    date TEXT PRIMARY KEY,
+                    value REAL,
+                    cached_at TEXT NOT NULL
+                )
+            ''')
+            
+            # Create index on cached_at for efficient cleanup
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_hr_cached_at 
+                ON heart_rate_data(cached_at)
+            ''')
+            
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_hrv_cached_at 
+                ON hrv_data(cached_at)
+            ''')
+            
+            conn.commit()
     
     def _is_cache_valid(self, cached_at_str: str) -> bool:
         """
@@ -94,16 +93,15 @@ class CacheManager:
         """
         date_str = date.strftime('%Y-%m-%d')
         
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute(
-            'SELECT data, cached_at FROM heart_rate_data WHERE date = ?',
-            (date_str,)
-        )
-        
-        result = cursor.fetchone()
-        conn.close()
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            
+            cursor.execute(
+                'SELECT data, cached_at FROM heart_rate_data WHERE date = ?',
+                (date_str,)
+            )
+            
+            result = cursor.fetchone()
         
         if result:
             data_json, cached_at = result
@@ -139,23 +137,23 @@ class CacheManager:
         # Convert datetime objects to ISO format strings for JSON serialization
         serializable_data = []
         for point in data:
-            serializable_point = point.copy()
-            if isinstance(serializable_point.get('timestamp'), datetime):
-                serializable_point['timestamp'] = serializable_point['timestamp'].isoformat()
+            serializable_point = {
+                'timestamp': point['timestamp'].isoformat() if isinstance(point.get('timestamp'), datetime) else point['timestamp'],
+                'heart_rate': point['heart_rate']
+            }
             serializable_data.append(serializable_point)
         
         data_json = json.dumps(serializable_data)
         
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            INSERT OR REPLACE INTO heart_rate_data (date, data, cached_at)
-            VALUES (?, ?, ?)
-        ''', (date_str, data_json, cached_at))
-        
-        conn.commit()
-        conn.close()
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                INSERT OR REPLACE INTO heart_rate_data (date, data, cached_at)
+                VALUES (?, ?, ?)
+            ''', (date_str, data_json, cached_at))
+            
+            conn.commit()
         
         print(f"Cached HR data for {date_str} ({len(data)} points)")
     
@@ -171,16 +169,15 @@ class CacheManager:
         """
         date_str = date.strftime('%Y-%m-%d')
         
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute(
-            'SELECT value, cached_at FROM hrv_data WHERE date = ?',
-            (date_str,)
-        )
-        
-        result = cursor.fetchone()
-        conn.close()
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            
+            cursor.execute(
+                'SELECT value, cached_at FROM hrv_data WHERE date = ?',
+                (date_str,)
+            )
+            
+            result = cursor.fetchone()
         
         if result:
             value, cached_at = result
@@ -208,36 +205,33 @@ class CacheManager:
         date_str = date.strftime('%Y-%m-%d')
         cached_at = datetime.now().isoformat()
         
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            INSERT OR REPLACE INTO hrv_data (date, value, cached_at)
-            VALUES (?, ?, ?)
-        ''', (date_str, value, cached_at))
-        
-        conn.commit()
-        conn.close()
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                INSERT OR REPLACE INTO hrv_data (date, value, cached_at)
+                VALUES (?, ?, ?)
+            ''', (date_str, value, cached_at))
+            
+            conn.commit()
         
         print(f"Cached HRV data for {date_str} (value: {value})")
     
     def _delete_heart_rate_data(self, date: datetime) -> None:
         """Delete heart rate data for a specific date"""
         date_str = date.strftime('%Y-%m-%d')
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute('DELETE FROM heart_rate_data WHERE date = ?', (date_str,))
-        conn.commit()
-        conn.close()
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute('DELETE FROM heart_rate_data WHERE date = ?', (date_str,))
+            conn.commit()
     
     def _delete_hrv_data(self, date: datetime) -> None:
         """Delete HRV data for a specific date"""
         date_str = date.strftime('%Y-%m-%d')
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute('DELETE FROM hrv_data WHERE date = ?', (date_str,))
-        conn.commit()
-        conn.close()
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute('DELETE FROM hrv_data WHERE date = ?', (date_str,))
+            conn.commit()
     
     def cleanup_expired(self) -> Dict[str, int]:
         """
@@ -249,25 +243,24 @@ class CacheManager:
         expiry_time = datetime.now() - timedelta(hours=self.cache_hours)
         expiry_str = expiry_time.isoformat()
         
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        # Delete expired HR data
-        cursor.execute(
-            'DELETE FROM heart_rate_data WHERE cached_at < ?',
-            (expiry_str,)
-        )
-        hr_deleted = cursor.rowcount
-        
-        # Delete expired HRV data
-        cursor.execute(
-            'DELETE FROM hrv_data WHERE cached_at < ?',
-            (expiry_str,)
-        )
-        hrv_deleted = cursor.rowcount
-        
-        conn.commit()
-        conn.close()
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            
+            # Delete expired HR data
+            cursor.execute(
+                'DELETE FROM heart_rate_data WHERE cached_at < ?',
+                (expiry_str,)
+            )
+            hr_deleted = cursor.rowcount
+            
+            # Delete expired HRV data
+            cursor.execute(
+                'DELETE FROM hrv_data WHERE cached_at < ?',
+                (expiry_str,)
+            )
+            hrv_deleted = cursor.rowcount
+            
+            conn.commit()
         
         if hr_deleted > 0 or hrv_deleted > 0:
             print(f"Cleaned up {hr_deleted} HR entries and {hrv_deleted} HRV entries")
@@ -281,16 +274,14 @@ class CacheManager:
         Returns:
             Dictionary with cache statistics
         """
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('SELECT COUNT(*) FROM heart_rate_data')
-        hr_count = cursor.fetchone()[0]
-        
-        cursor.execute('SELECT COUNT(*) FROM hrv_data')
-        hrv_count = cursor.fetchone()[0]
-        
-        conn.close()
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            
+            cursor.execute('SELECT COUNT(*) FROM heart_rate_data')
+            hr_count = cursor.fetchone()[0]
+            
+            cursor.execute('SELECT COUNT(*) FROM hrv_data')
+            hrv_count = cursor.fetchone()[0]
         
         return {
             'hr_entries': hr_count,
@@ -300,13 +291,12 @@ class CacheManager:
     
     def clear_all(self) -> None:
         """Clear all cached data"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('DELETE FROM heart_rate_data')
-        cursor.execute('DELETE FROM hrv_data')
-        
-        conn.commit()
-        conn.close()
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            
+            cursor.execute('DELETE FROM heart_rate_data')
+            cursor.execute('DELETE FROM hrv_data')
+            
+            conn.commit()
         
         print("Cleared all cached data")

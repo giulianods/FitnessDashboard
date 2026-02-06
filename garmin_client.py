@@ -156,6 +156,7 @@ class GarminClient:
         date_str = date.strftime('%Y-%m-%d')
         print(f"Fetching HRV data from Garmin API for {date_str}...")
         
+        hrv_value = None
         try:
             # Get sleep data which contains avgOvernightHrv
             sleep_data = self.client.get_sleep_data(date_str)
@@ -168,21 +169,14 @@ class GarminClient:
                     print(f"Retrieved HRV value from API: {hrv_value} ms")
                 else:
                     print(f"No avgOvernightHrv found in sleep data for {date_str}")
-                
-                # Cache the result (even if None)
-                if self.use_cache and self.cache:
-                    self.cache.set_hrv_data(date, hrv_value)
-                
-                return hrv_value
             else:
                 print(f"No sleep data found for {date_str}")
                 
-                # Cache None result to avoid repeated API calls
-                if self.use_cache and self.cache:
-                    self.cache.set_hrv_data(date, None)
-                
-                return None
-                
         except Exception as e:
             print(f"Failed to get HRV data for {date_str}: {e}")
-            return None
+        
+        # Cache the result (even if None) to avoid repeated API calls
+        if self.use_cache and self.cache:
+            self.cache.set_hrv_data(date, hrv_value)
+        
+        return hrv_value
