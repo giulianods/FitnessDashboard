@@ -116,46 +116,92 @@ class GarminClient:
         """
         Get HRV (Heart Rate Variability) data for a specific date
         
+        Tries multiple sources:
+        1. Direct HRV endpoint (get_hrv_data)
+        2. Sleep data (may contain HRV metrics)
+        3. Returns None if no HRV data is available
+        
         Args:
             date: Date to retrieve HRV data for
             
         Returns:
-            HRV value (nightly average) or None if not available
+            HRV value (nightly average in milliseconds) or None if not available
         """
         if not self.client:
             raise Exception("Not logged in. Call login() first")
         
+        date_str = date.strftime('%Y-%m-%d')
+        print(f"Fetching HRV data for {date_str}...")
+        
+        # Method 1: Try direct HRV endpoint
         try:
-            date_str = date.strftime('%Y-%m-%d')
-            print(f"Fetching HRV data for {date_str}...")
-            
-            # Get HRV data using get_hrv_data method from garminconnect
             hrv_data = self.client.get_hrv_data(date_str)
             
-            if not hrv_data:
-                print(f"No HRV data found for {date_str}")
-                return None
-            
-            # Extract the weekly average HRV or last night's HRV
-            # The API returns various HRV metrics
-            hrv_value = None
-            
-            # Try to get last night's HRV value
-            if isinstance(hrv_data, dict):
-                # Check for lastNightAvg (most relevant for nightly HRV)
+            if hrv_data and isinstance(hrv_data, dict):
+                # Try to get last night's HRV value
                 hrv_value = hrv_data.get('lastNightAvg')
                 
                 # Fallback to weeklyAvg if lastNightAvg not available
                 if hrv_value is None:
                     hrv_value = hrv_data.get('weeklyAvg')
-            
-            if hrv_value is not None:
-                print(f"Retrieved HRV value: {hrv_value}")
-            else:
-                print(f"No HRV value found for {date_str}")
                 
-            return hrv_value
-            
+                # Also check for other possible field names
+                if hrv_value is None:
+                    hrv_value = hrv_data.get('hrvValue')
+                
+                if hrv_value is not None:
+                    print(f"Retrieved HRV value from direct endpoint: {hrv_value} ms")
+                    return hrv_value
         except Exception as e:
-            print(f"Failed to get HRV data for {date.strftime('%Y-%m-%d')}: {e}")
-            return None
+            print(f"Direct HRV endpoint failed: {e}")
+        
+        # Method 2: Try to extract HRV from sleep data
+        try:
+            print(f"Trying to extract HRV from sleep data...")
+            sleep_data = self.client.get_sleep_data(date_str)
+            
+            if sleep_data and isinstance(sleep_data, dict):
+                # Check various possible locations for HRV data in sleep response
+                
+                # Check in dailySleepDTO
+                daily_sleep = sleep_data.get('dailySleepDTO', {})
+                if daily_sleep:
+                    # Some devices report average overnight HRV
+                    hrv_value = daily_sleep.get('averageHRV')
+                    if hrv_value is not None:
+                        print(f"Retrieved HRV from sleep data (averageHRV): {hrv_value} ms")
+                        return hrv_value
+                    
+                    # Check for HRV in sleep scores
+                    sleep_scores = daily_sleep.get('sleepScores', {})
+                    if isinstance(sleep_scores, dict):
+                        hrv_value = sleep_scores.get('hrv')
+                        if hrv_value is not None:
+                            print(f"Retrieved HRV from sleep scores: {hrv_value} ms")
+                            return hrv_value
+                
+                # Check for HRV in wellness data
+                hrv_value = sleep_data.get('averageHRV')
+                if hrv_value is not None:
+                    print(f"Retrieved HRV from wellness data: {hrv_value} ms")
+                    return hrv_value
+                    
+        except Exception as e:
+            print(f"Sleep data HRV extraction failed: {e}")
+        
+        # Method 3: Try stats data which might contain HRV
+        try:
+            print(f"Trying to extract HRV from daily stats...")
+            stats_data = self.client.get_stats(date_str)
+            
+            if stats_data and isinstance(stats_data, dict):
+                hrv_value = stats_data.get('hrvValue')
+                if hrv_value is not None:
+                    print(f"Retrieved HRV from stats data: {hrv_value} ms")
+                    return hrv_value
+        except Exception as e:
+            print(f"Stats data HRV extraction failed: {e}")
+        
+        print(f"No HRV data found for {date_str} from any source")
+        print(f"Note: HRV data requires compatible Garmin device and may not be available for all dates")
+        return None
