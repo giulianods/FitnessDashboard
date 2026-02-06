@@ -279,10 +279,10 @@
 <body>
     <!-- Sidebar menu -->
     <div class="sidebar">
-        <div class="menu-item active" onclick="switchView('daily')" title="Daily View">
+        <div class="menu-item active" onclick="switchView('daily', event)" title="Daily View">
             📅
         </div>
-        <div class="menu-item" onclick="switchView('historical')" title="Historical Trends">
+        <div class="menu-item" onclick="switchView('historical', event)" title="Historical Trends">
             📊
         </div>
     </div>
@@ -327,12 +327,12 @@
             <div class="controls">
                 <div class="period-picker-container">
                     <label>Time Period:</label>
-                    <button class="period-btn active" onclick="loadHistoricalData(4)">4 Weeks</button>
-                    <button class="period-btn" onclick="loadHistoricalData(8)">8 Weeks</button>
-                    <button class="period-btn" onclick="loadHistoricalData(12)">12 Weeks</button>
-                    <button class="period-btn" onclick="loadHistoricalData(16)">16 Weeks</button>
-                    <button class="period-btn" onclick="loadHistoricalData(24)">24 Weeks</button>
-                    <button class="period-btn" onclick="loadHistoricalData(48)">48 Weeks</button>
+                    <button class="period-btn active" onclick="loadHistoricalData(4, event)">4 Weeks</button>
+                    <button class="period-btn" onclick="loadHistoricalData(8, event)">8 Weeks</button>
+                    <button class="period-btn" onclick="loadHistoricalData(12, event)">12 Weeks</button>
+                    <button class="period-btn" onclick="loadHistoricalData(16, event)">16 Weeks</button>
+                    <button class="period-btn" onclick="loadHistoricalData(24, event)">24 Weeks</button>
+                    <button class="period-btn" onclick="loadHistoricalData(48, event)">48 Weeks</button>
                 </div>
             </div>
             
@@ -365,7 +365,7 @@
         });
         
         // View switching function
-        function switchView(view) {
+        function switchView(view, event) {
             currentView = view;
             
             // Update menu items
@@ -457,7 +457,7 @@
                 });
         }
         
-        function loadHistoricalData(weeks) {
+        function loadHistoricalData(weeks, event) {
             currentWeeks = weeks;
             
             // Update active button
