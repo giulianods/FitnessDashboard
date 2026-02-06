@@ -4,66 +4,50 @@
 The Garmin API's direct HRV endpoint (`/hrv-service/hrv/{date}`) was returning None/empty for all dates, even though heart rate data was available for the same dates.
 
 ## Root Cause
-1. **Limited API Support**: The direct HRV endpoint may not have data for all Garmin users
-2. **Device Requirements**: HRV tracking requires specific Garmin devices with advanced sensors
-3. **Feature Availability**: Not all Garmin devices continuously track HRV
-4. **Data Availability**: HRV is typically only measured during sleep periods
+The direct HRV endpoint has limited availability. However, HRV data is actually available through the sleep data endpoint.
 
 ## Solution Implemented
 
-The updated `get_hrv_data()` method now tries multiple sources in order:
+The HRV data is retrieved from the **sleep data endpoint** which returns the following structure:
 
-### Method 1: Direct HRV Endpoint (Primary)
-```python
-hrv_data = self.client.get_hrv_data(date_str)
+```json
+{
+    "avgOvernightHrv": 62.0,
+    "bodyBatteryChange": 50,
+    "dailySleepDTO": { ... },
+    "hrvData": [ ... ]
+}
 ```
-**Checks for fields:**
-- `lastNightAvg` - Last night's average HRV (preferred)
-- `weeklyAvg` - Weekly average HRV (fallback)
-- `hrvValue` - Generic HRV value
 
-### Method 2: Sleep Data Extraction (Secondary)
-```python
-sleep_data = self.client.get_sleep_data(date_str)
-```
-**Checks for fields:**
-- `dailySleepDTO.averageHRV` - Average HRV during sleep
-- `dailySleepDTO.sleepScores.hrv` - HRV from sleep quality scores
-- `averageHRV` - Wellness data HRV value
+The `avgOvernightHrv` field at the top level of the response contains the average overnight HRV value in milliseconds.
 
-### Method 3: Daily Stats (Tertiary)
+### Implementation
 ```python
-stats_data = self.client.get_stats(date_str)
+def get_hrv_data(self, date: datetime) -> Optional[float]:
+    sleep_data = self.client.get_sleep_data(date_str)
+    return sleep_data.get('avgOvernightHrv') if sleep_data else None
 ```
-**Checks for fields:**
-- `hrvValue` - HRV in daily statistics
 
 ## Expected Behavior
 
 ### When HRV Data is Available:
-- Method returns HRV value (in milliseconds)
-- Logs which source provided the data
+- Method returns `avgOvernightHrv` value (in milliseconds)
+- Logs the retrieved value
 - Chart displays HRV trends
 
 ### When HRV Data is Not Available:
 - Method returns `None`
-- Logs attempts at all sources
-- Displays helpful message about device requirements
+- Logs that no sleep data was found
 - Chart gracefully handles missing HRV values (shows gaps)
 
-## Testing Recommendations
+## Data Structure Details
 
-Since HRV data requires actual Garmin device data:
+The `get_sleep_data()` response includes:
 
-1. **With Real Credentials**: 
-   - Test with actual Garmin account that has HRV-capable device
-   - Verify data appears in historical trends chart
-   - Check logs to see which method succeeded
-
-2. **Without HRV Data**:
-   - Verify application doesn't crash
-   - Confirm `None` is returned gracefully
-   - Ensure UI shows empty/missing data appropriately
+- **`avgOvernightHrv`**: Average overnight HRV (the main field we use)
+- **`hrvData`**: Array of HRV measurements throughout the night with timestamps
+- **`dailySleepDTO`**: Detailed sleep metrics including sleep stages
+- **`bodyBatteryChange`**: Body battery change during sleep
 
 ## Device Compatibility
 
@@ -78,24 +62,30 @@ Since HRV data requires actual Garmin device data:
 **Requirements:**
 - Device must support Firstbeat analytics
 - HRV tracking must be enabled in device settings
+- Device must be worn overnight for sleep tracking
 - Data must be synced to Garmin Connect
 
 ## API Limitations
 
-- HRV endpoint may not be available for all account types
-- Data typically only available for dates when device was worn overnight
+- HRV data only available for dates when device was worn overnight
+- Sleep data must be successfully recorded
 - Some devices only measure HRV during specific sleep stages
 - Historical HRV data may have limited retention period
 
-## Future Improvements
+## Testing Recommendations
 
-Potential enhancements if issues persist:
+Since HRV data requires actual Garmin device data:
 
-1. Add caching to reduce API calls for known-empty dates
-2. Implement user notification about HRV device requirements
-3. Add configuration option to disable HRV chart if not available
-4. Explore additional Garmin API endpoints as they become available
-5. Consider alternative HRV calculation from raw HR data (advanced)
+1. **With Real Credentials**: 
+   - Test with actual Garmin account that has HRV-capable device
+   - Verify `avgOvernightHrv` appears in sleep data response
+   - Check that data appears in historical trends chart
+   - Verify logs show successful HRV retrieval
+
+2. **Without HRV Data**:
+   - Verify application doesn't crash
+   - Confirm `None` is returned gracefully
+   - Ensure UI shows empty/missing data appropriately
 
 ## Related Files
 
