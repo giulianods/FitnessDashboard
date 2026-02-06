@@ -507,7 +507,7 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR):
     
     # Chart D: Daily HRV (positioned at row 2, col 1)
     # Filter out None values for plotting
-    hrv_dates = [dates[i] for i in range(len(dates)) if daily_hrvs[i] is not None]
+    hrv_dates = [date for date, hrv in zip(dates, daily_hrvs) if hrv is not None]
     hrv_values = [v for v in daily_hrvs if v is not None]
     
     if hrv_values:
@@ -558,10 +558,11 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR):
             # Add annotation with stats
             lognorm_mean_original = lognorm_mean + min_hr
             lognorm_stats_text = f'Min Waking HR: {min_hr:.0f} bpm<br>μ = {lognorm_mean_original:.1f} bpm<br>σ = {lognorm_std:.1f} bpm'
+            # Chart C is at position (2,2) which corresponds to x4/y4 in plotly
             fig.add_annotation(
                 text=lognorm_stats_text,
-                xref='x4',
-                yref='y4',
+                xref='x4',  # Chart C: row 2, col 2
+                yref='y4',  # Chart C: row 2, col 2
                 x=max_hr * 0.75,
                 y=max(y_fit) * 0.85,
                 showarrow=False,
