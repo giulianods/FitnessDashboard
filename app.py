@@ -373,7 +373,7 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR):
         JSON string for Plotly chart
     """
     if not weeks_data:
-        return None
+        return None, None
     
     # Garmin HR Zones
     garmin_zones = {
