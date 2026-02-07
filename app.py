@@ -574,11 +574,10 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
         
         # Add moving average for HRV
         # Calculate MA using all dates (including None values) to maintain proper alignment
-        hrv_ma_filtered = [(date, ma) for date, ma in zip(dates, hrv_values_ma) if ma is not None]
-        if hrv_ma_filtered:
-            hrv_ma_dates = [d for d, _ in hrv_ma_filtered]
-            hrv_ma_vals = [v for _, v in hrv_ma_filtered]
-            
+        hrv_ma_dates = [date for date, ma in zip(dates, hrv_values_ma) if ma is not None]
+        hrv_ma_vals = [ma for ma in hrv_values_ma if ma is not None]
+        
+        if hrv_ma_dates:
             fig.add_trace(go.Scatter(
                 x=hrv_ma_dates,
                 y=hrv_ma_vals,
@@ -755,7 +754,7 @@ def get_historical_data():
             'chart': chart_json,
             'stats': stats,
             'weeks': weeks,
-            'days_with_data': len([d for d in weeks_data if d >= start_date.strftime('%Y-%m-%d')])
+            'days_with_data': sum(1 for d in weeks_data if d >= start_date.strftime('%Y-%m-%d'))
         })
         
     except ValueError:
@@ -860,7 +859,7 @@ def get_monthly_data():
             'stats': stats,
             'year': year,
             'month': month,
-            'days_with_data': len([d for d in month_data if d >= start_date.strftime('%Y-%m-%d')])
+            'days_with_data': sum(1 for d in month_data if d >= start_date.strftime('%Y-%m-%d'))
         })
         
     except ValueError:
