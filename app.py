@@ -175,17 +175,23 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
         max_hr_val = max(waking_hours_hr)
         nbins = 50
         
-        # Create histogram to get bin edges
+        # Create histogram to get bin edges and values
         hist_values, bin_edges = np.histogram(waking_hours_hr, bins=nbins)
+        
+        # Calculate bin centers for x-axis positions
+        bin_centers = [(bin_edges[i] + bin_edges[i+1]) / 2 for i in range(len(bin_edges) - 1)]
+        bin_width = bin_edges[1] - bin_edges[0]
+        
+        # Normalize to probability density for comparison with fitted curve
+        bin_area = bin_width * len(waking_hours_hr)
+        hist_density = hist_values / bin_area
         
         # Calculate color for each bin with two-tier gradient:
         # Below Z0 (50% max HR): Dark purple (night colors)
         # Z0 and above: Rainbow gradient (purple to red)
         z0_threshold = max_hr * 0.5  # Z0 is 50% of max HR
         bin_colors = []
-        for i in range(len(bin_edges) - 1):
-            bin_center = (bin_edges[i] + bin_edges[i+1]) / 2
-            
+        for bin_center in bin_centers:
             if bin_center < z0_threshold:
                 # Below Z0: Dark purple (night colors) - darker for lower HR
                 position = bin_center / z0_threshold if z0_threshold > 0 else 0
@@ -203,17 +209,17 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
             rgb = tuple(int(x * 255) for x in colorsys.hsv_to_rgb(hue/360, sat, val))
             bin_colors.append(f'rgb({rgb[0]},{rgb[1]},{rgb[2]})')
         
-        # Add histogram with gradient colors
-        fig.add_trace(go.Histogram(
-            x=waking_hours_hr,
-            nbinsx=nbins,
+        # Add bar chart with gradient colors (using Bar instead of Histogram for color control)
+        fig.add_trace(go.Bar(
+            x=bin_centers,
+            y=hist_density,
+            width=bin_width * 0.9,  # Slightly narrower to show separation
             marker=dict(
                 color=bin_colors,
                 line=dict(color='white', width=1)
             ),
             showlegend=False,
-            name='HR Distribution',
-            histnorm='probability density'  # Normalize to show density for comparison with fitted curve
+            name='HR Distribution'
         ), row=2, col=2)
         
         # Fit lognormal distribution shifted by resting heart rate
@@ -679,17 +685,23 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
         max_hr_val = max(all_waking_hrs)
         nbins = 50
         
-        # Create histogram to get bin edges
+        # Create histogram to get bin edges and values
         hist_values, bin_edges = np.histogram(all_waking_hrs, bins=nbins)
+        
+        # Calculate bin centers for x-axis positions
+        bin_centers = [(bin_edges[i] + bin_edges[i+1]) / 2 for i in range(len(bin_edges) - 1)]
+        bin_width = bin_edges[1] - bin_edges[0]
+        
+        # Normalize to probability density for comparison with fitted curve
+        bin_area = bin_width * len(all_waking_hrs)
+        hist_density = hist_values / bin_area
         
         # Calculate color for each bin with two-tier gradient:
         # Below Z0 (50% max HR): Dark purple (night colors)
         # Z0 and above: Rainbow gradient (purple to red)
         z0_threshold = max_hr * 0.5  # Z0 is 50% of max HR
         bin_colors = []
-        for i in range(len(bin_edges) - 1):
-            bin_center = (bin_edges[i] + bin_edges[i+1]) / 2
-            
+        for bin_center in bin_centers:
             if bin_center < z0_threshold:
                 # Below Z0: Dark purple (night colors) - darker for lower HR
                 position = bin_center / z0_threshold if z0_threshold > 0 else 0
@@ -707,17 +719,17 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
             rgb = tuple(int(x * 255) for x in colorsys.hsv_to_rgb(hue/360, sat, val))
             bin_colors.append(f'rgb({rgb[0]},{rgb[1]},{rgb[2]})')
         
-        # Add histogram with gradient colors
-        fig.add_trace(go.Histogram(
-            x=all_waking_hrs,
-            nbinsx=nbins,
+        # Add bar chart with gradient colors (using Bar instead of Histogram for color control)
+        fig.add_trace(go.Bar(
+            x=bin_centers,
+            y=hist_density,
+            width=bin_width * 0.9,  # Slightly narrower to show separation
             marker=dict(
                 color=bin_colors,
                 line=dict(color='white', width=1)
             ),
             showlegend=False,
-            name='HR Distribution',
-            histnorm='probability density'
+            name='HR Distribution'
         ), row=2, col=2)
         
         # Fit lognormal distribution
