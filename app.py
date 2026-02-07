@@ -154,8 +154,8 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
     zone_names = list(garmin_zones.keys())
     zone_time_values = [zone_times[z] for z in garmin_zones.keys()]
     zone_labels = [f"{z} - {garmin_zones[z][2]}" for z in garmin_zones.keys()]
-    # Updated colors for Z0-Z5: gray for rest, then green->yellow->orange->red->dark red
-    zone_colors_bar = ['#A9A9A9', '#90EE90', '#FFD700', '#FFA500', '#FF6347', '#DC143C']
+    # Standardized zone colors: Z0=grey, Z1=light blue, Z2=green, Z3=orange, Z4=red, Z5=dark red
+    zone_colors_bar = ['#808080', '#87CEEB', '#00FF00', '#FFA500', '#FF0000', '#8B0000']
     
     fig.add_trace(go.Bar(
         y=zone_labels,
