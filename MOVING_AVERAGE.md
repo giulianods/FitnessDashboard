@@ -11,17 +11,23 @@ Moving average lines have been added to two charts:
 2. **Chart D: Daily HRV** - Shows moving average for HRV (Heart Rate Variability)
 
 ### Moving Average Window Calculation
-The moving average window equals the **full displayed period**:
+The moving average uses a **fixed 28-day (4-week) window** regardless of the display period:
 
-| Display Period | Days | MA Window | 
-|---------------|------|-----------|
-| 4 weeks | 28 | 28 days |
-| 8 weeks | 56 | 56 days |
-| 12 weeks | 84 | 84 days |
-| 16 weeks | 112 | 112 days |
-| 24 weeks | 168 | 168 days |
-| 48 weeks | 336 | 336 days |
-| Monthly | ~30 | ~30 days |
+| Display Period | Days | MA Window | Prefetch Days |
+|---------------|------|-----------|---------------|
+| 4 weeks | 28 | 28 days | 27 days |
+| 8 weeks | 56 | 28 days | 27 days |
+| 12 weeks | 84 | 28 days | 27 days |
+| 16 weeks | 112 | 28 days | 27 days |
+| 24 weeks | 168 | 28 days | 27 days |
+| 48 weeks | 336 | 28 days | 27 days |
+| Monthly | ~30 | 28 days | 27 days |
+
+**Benefits of fixed 28-day window:**
+- Consistent smoothing across all time periods
+- Comparable MA values between different views
+- Better performance for long periods (less data to prefetch)
+- More responsive trends for long time periods
 
 ### Key Features
 

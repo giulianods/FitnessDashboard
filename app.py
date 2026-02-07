@@ -536,12 +536,8 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
         else:
             total_zone_times[zone] = 0
     
-    # Calculate moving average window size (full display period)
-    if display_days:
-        ma_window = max(1, display_days)
-    else:
-        # Default based on number of dates
-        ma_window = max(1, len(dates))
+    # Calculate moving average window size (fixed 28-day window)
+    ma_window = 28  # Fixed 4-week (28-day) moving average regardless of display period
     
     # Calculate moving averages for Min HR and HRV
     daily_mins_ma = calculate_moving_average(daily_mins, ma_window)
@@ -839,17 +835,18 @@ def get_historical_data():
         # Get Garmin client
         client = get_garmin_client()
         
-        # Calculate display period and moving average window (full display period)
+        # Calculate display period and moving average window
         display_days = weeks * 7
-        ma_window = max(1, display_days)
+        ma_window = 28  # Fixed 4-week (28-day) moving average regardless of display period
+        prefetch_days = 27  # Always prefetch 27 days for 28-day MA
         
         # Fetch data for the last N weeks (excluding today)
         # Also fetch extra data for moving average calculation
         end_date = datetime.now() - timedelta(days=1)  # Exclude today
         start_date = end_date - timedelta(weeks=weeks)
         
-        # Fetch additional data before start_date for moving average (full period - 1)
-        prefetch_start_date = start_date - timedelta(days=ma_window - 1)
+        # Fetch additional data before start_date for moving average
+        prefetch_start_date = start_date - timedelta(days=prefetch_days)
         
         weeks_data = {}
         all_heart_rates = []
@@ -958,12 +955,12 @@ def get_monthly_data():
         end_date_date = min(last_day_of_month.date(), today)
         end_date = datetime.combine(end_date_date, datetime.min.time())
         
-        # Calculate display period and moving average window (full display period)
+        # Calculate display period and moving average window
         display_days = (end_date - start_date).days + 1
-        ma_window = max(1, display_days)
+        ma_window = 28  # Fixed 4-week (28-day) moving average regardless of display period
         
-        # Fetch additional data before start_date for moving average (full period - 1)
-        prefetch_start_date = start_date - timedelta(days=ma_window - 1)
+        # Fetch additional data before start_date for moving average
+        prefetch_start_date = start_date - timedelta(days=27)  # Always prefetch 27 days for 28-day MA
         
         # Fetch data for all days in the month (plus prefetch period)
         month_data = {}
