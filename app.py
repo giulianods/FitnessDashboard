@@ -12,6 +12,7 @@ import plotly.utils
 import json
 import numpy as np
 from scipy import stats
+import colorsys
 
 app = Flask(__name__)
 
@@ -169,11 +170,35 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
     
     # Add histogram for HR distribution during waking hours with lognormal fit
     if waking_hours_hr:
-        # Add histogram
+        # Calculate bin colors for rainbow gradient (purple for low HR, red for high HR)
+        min_hr_val = min(waking_hours_hr)
+        max_hr_val = max(waking_hours_hr)
+        nbins = 50
+        
+        # Create histogram to get bin edges
+        hist_values, bin_edges = np.histogram(waking_hours_hr, bins=nbins)
+        
+        # Calculate color for each bin based on its position (purple to red gradient)
+        # HSV: Hue from 270 (purple) to 0 (red), passing through blue, green, yellow, orange
+        bin_colors = []
+        for i in range(len(bin_edges) - 1):
+            bin_center = (bin_edges[i] + bin_edges[i+1]) / 2
+            # Normalize position (0 = min HR, 1 = max HR)
+            position = (bin_center - min_hr_val) / (max_hr_val - min_hr_val) if max_hr_val > min_hr_val else 0
+            # Map to hue: 270° (purple) at position 0, to 0° (red) at position 1
+            hue = 270 * (1 - position)  # Reverse: purple (270°) → red (0°)
+            # Convert HSV to RGB (saturation=0.8, value=0.9 for vibrant colors)
+            rgb = tuple(int(x * 255) for x in colorsys.hsv_to_rgb(hue/360, 0.8, 0.9))
+            bin_colors.append(f'rgb({rgb[0]},{rgb[1]},{rgb[2]})')
+        
+        # Add histogram with gradient colors
         fig.add_trace(go.Histogram(
             x=waking_hours_hr,
-            nbinsx=50,  # Increased from 30 for more granularity
-            marker=dict(color='#4A90E2', line=dict(color='white', width=1)),
+            nbinsx=nbins,
+            marker=dict(
+                color=bin_colors,
+                line=dict(color='white', width=1)
+            ),
             showlegend=False,
             name='HR Distribution',
             histnorm='probability density'  # Normalize to show density for comparison with fitted curve
@@ -637,10 +662,35 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
     
     # Chart C: Heart rate distribution with lognormal fit (positioned at row 2, col 2)
     if all_waking_hrs:
+        # Calculate bin colors for rainbow gradient (purple for low HR, red for high HR)
+        min_hr_val = min(all_waking_hrs)
+        max_hr_val = max(all_waking_hrs)
+        nbins = 50
+        
+        # Create histogram to get bin edges
+        hist_values, bin_edges = np.histogram(all_waking_hrs, bins=nbins)
+        
+        # Calculate color for each bin based on its position (purple to red gradient)
+        # HSV: Hue from 270 (purple) to 0 (red), passing through blue, green, yellow, orange
+        bin_colors = []
+        for i in range(len(bin_edges) - 1):
+            bin_center = (bin_edges[i] + bin_edges[i+1]) / 2
+            # Normalize position (0 = min HR, 1 = max HR)
+            position = (bin_center - min_hr_val) / (max_hr_val - min_hr_val) if max_hr_val > min_hr_val else 0
+            # Map to hue: 270° (purple) at position 0, to 0° (red) at position 1
+            hue = 270 * (1 - position)  # Reverse: purple (270°) → red (0°)
+            # Convert HSV to RGB (saturation=0.8, value=0.9 for vibrant colors)
+            rgb = tuple(int(x * 255) for x in colorsys.hsv_to_rgb(hue/360, 0.8, 0.9))
+            bin_colors.append(f'rgb({rgb[0]},{rgb[1]},{rgb[2]})')
+        
+        # Add histogram with gradient colors
         fig.add_trace(go.Histogram(
             x=all_waking_hrs,
-            nbinsx=50,
-            marker=dict(color='#4A90E2', line=dict(color='white', width=1)),
+            nbinsx=nbins,
+            marker=dict(
+                color=bin_colors,
+                line=dict(color='white', width=1)
+            ),
             showlegend=False,
             name='HR Distribution',
             histnorm='probability density'
