@@ -62,14 +62,14 @@ Both `get_historical_data()` and `get_monthly_data()` functions were modified to
 
 #### 3. Chart Visualization
 **Min HR Moving Average (Chart A):**
-- Color: Dark blue (#1E3A8A)
-- Line width: 3
+- Color: Orange (#FF6B35) - provides contrast with blue data points
+- Line width: 2 (thinner for cleaner appearance)
 - Style: Solid line without markers
 - Overlaid on the light blue min HR data points
 
 **HRV Moving Average (Chart D):**
-- Color: Dark purple (#6A1B9A)
-- Line width: 3
+- Color: Green (#28B463) - provides contrast with purple data points
+- Line width: 2 (thinner for cleaner appearance)
 - Style: Solid line without markers
 - Overlaid on the light purple HRV data points
 

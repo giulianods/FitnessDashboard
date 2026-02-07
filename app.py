@@ -535,7 +535,7 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
         y=daily_mins_ma,
         mode='lines',
         name=f'Min HR MA ({ma_window}d)',
-        line=dict(color='#1E3A8A', width=3, dash='solid'),
+        line=dict(color='#FF6B35', width=2, dash='solid'),  # Orange for contrast with blue
         showlegend=False
     ), row=1, col=1)
     
@@ -583,7 +583,7 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
                 y=hrv_ma_vals,
                 mode='lines',
                 name=f'HRV MA ({ma_window}d)',
-                line=dict(color='#6A1B9A', width=3, dash='solid'),
+                line=dict(color='#28B463', width=2, dash='solid'),  # Green for contrast with purple
                 showlegend=False
             ), row=2, col=1)
     
