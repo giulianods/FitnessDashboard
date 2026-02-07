@@ -439,35 +439,39 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
             data = entry
             hrv_value = None
             
-        if not data:
-            continue
-            
-        heart_rates = [point['heart_rate'] for point in data]
+        # Always add the date to maintain chronological order for moving averages
+        # Even if there's no HR data, we need the date for proper MA calculation
         dates.append(date_str)
-        daily_mins.append(min(heart_rates))
-        daily_maxs.append(max(heart_rates))
         
-        # Add HRV value if available
-        if hrv_value is not None:
-            daily_hrvs.append(hrv_value)
+        if data:
+            heart_rates = [point['heart_rate'] for point in data]
+            daily_mins.append(min(heart_rates))
+            daily_maxs.append(max(heart_rates))
         else:
-            daily_hrvs.append(None)
+            # No HR data for this date - use None
+            daily_mins.append(None)
+            daily_maxs.append(None)
         
-        # Filter waking hours data (6:00-22:00)
-        waking_hours_data = []
-        for point in data:
-            hour = point['timestamp'].hour
-            if 6 <= hour < 22:
-                waking_hours_data.append(point)
-                all_waking_hrs.append(point['heart_rate'])
+        # Add HRV value if available (or None)
+        daily_hrvs.append(hrv_value)
         
-        # Calculate zone distribution for this day
-        waking_hours_hr = [point['heart_rate'] for point in waking_hours_data]
-        for hr in waking_hours_hr:
-            for zone_name, (lower, upper, _) in garmin_zones.items():
-                if lower <= hr < upper:
-                    total_zone_times[zone_name] += 1
-                    break
+        # Process waking hours data only if HR data exists
+        if data:
+            # Filter waking hours data (6:00-22:00)
+            waking_hours_data = []
+            for point in data:
+                hour = point['timestamp'].hour
+                if 6 <= hour < 22:
+                    waking_hours_data.append(point)
+                    all_waking_hrs.append(point['heart_rate'])
+            
+            # Calculate zone distribution for this day
+            waking_hours_hr = [point['heart_rate'] for point in waking_hours_data]
+            for hr in waking_hours_hr:
+                for zone_name, (lower, upper, _) in garmin_zones.items():
+                    if lower <= hr < upper:
+                        total_zone_times[zone_name] += 1
+                        break
     
     # Convert zone counts to time (proportional to total waking hours)
     total_waking_points = sum(total_zone_times.values())
@@ -557,7 +561,7 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
     ), row=1, col=2)
     
     # Chart D: Daily HRV (positioned at row 2, col 1)
-    # Filter out None values for plotting
+    # Filter out None values for plotting data points only
     hrv_dates = [date for date, hrv in zip(dates, daily_hrvs) if hrv is not None]
     hrv_values = [v for v in daily_hrvs if v is not None]
     
@@ -573,7 +577,8 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
         ), row=2, col=1)
         
         # Add moving average for HRV
-        # Calculate MA using all dates (including None values) to maintain proper alignment
+        # Use ALL dates (including prefetch period) for MA to show full trend from beginning
+        # Filter out only None MA values (not based on raw HRV values)
         hrv_ma_dates = [date for date, ma in zip(dates, hrv_values_ma) if ma is not None]
         hrv_ma_vals = [ma for ma in hrv_values_ma if ma is not None]
         
