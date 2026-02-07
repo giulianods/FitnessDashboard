@@ -846,9 +846,14 @@ def get_monthly_data():
         
         # Calculate last day of month
         if month == 12:
-            end_date = datetime(year + 1, 1, 1) - timedelta(days=1)
+            last_day_of_month = datetime(year + 1, 1, 1) - timedelta(days=1)
         else:
-            end_date = datetime(year, month + 1, 1) - timedelta(days=1)
+            last_day_of_month = datetime(year, month + 1, 1) - timedelta(days=1)
+        
+        # Don't go beyond today for current/future months
+        today = datetime.now().date()
+        end_date_date = min(last_day_of_month.date(), today)
+        end_date = datetime.combine(end_date_date, datetime.min.time())
         
         # Calculate display period and moving average window (full display period)
         display_days = (end_date - start_date).days + 1
