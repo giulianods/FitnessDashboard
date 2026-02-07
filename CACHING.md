@@ -4,6 +4,12 @@
 
 The Fitness Dashboard implements a local caching system using SQLite to dramatically improve performance when accessing Garmin data. Instead of fetching data from the Garmin API on every request (which takes 2-5 seconds), cached data is retrieved from the local database in milliseconds.
 
+### Key Optimizations
+
+1. **Future Date Skipping**: No API calls are made for future dates (they never have data)
+2. **None Value Caching**: Past dates with no data are cached to prevent repeated API calls
+3. **Smart Validation**: Distinguishes between "no data yet" (future) and "no data recorded" (past)
+
 ## Architecture
 
 ### Components
@@ -47,18 +53,51 @@ CREATE INDEX idx_hrv_cached_at ON hrv_data(cached_at);
 
 ## How It Works
 
-### Cache Flow
+### Cache Flow with Optimizations
 
 ```
-User Request → Check Cache → Cache Hit? → Return cached data
-                    ↓
-                Cache Miss
-                    ↓
-            Fetch from Garmin API
-                    ↓
-            Store in cache
-                    ↓
-            Return data
+User Request → Future date? → Yes → Return None (skip everything)
+       ↓
+      No (past/today)
+       ↓
+   Check Cache → Cache Hit? → Yes → Return cached data (or None)
+       ↓                              
+   Cache Miss
+       ↓
+Fetch from Garmin API
+       ↓
+Store in cache (even if None)
+       ↓
+Return data
+```
+
+### Future Date Optimization
+
+- **Before API call**: Check if requested date is in the future
+- **If future**: Return None immediately (no API call, no cache)
+- **Why**: Future dates never have data, so calling API is wasteful
+
+Example:
+```python
+# Viewing February 2026 on Feb 7
+dates = [Feb 1, Feb 2, ..., Feb 7, Feb 8, ..., Feb 28]
+
+# Old behavior: 28 API calls
+# New behavior: Max 7 API calls (Feb 1-7 only)
+# Savings: 75% reduction in API calls
+```
+
+### None Value Caching
+
+- **Past dates with no data**: API returns None → Cache it
+- **Future dates**: Don't cache None (data might exist in the future)
+- **Why**: Prevents repeated API calls for dates with no data
+
+Example:
+```python
+# User didn't wear device on Jan 15
+# First request: API call → None → Cache None
+# All future requests: Cache hit → None (no API call)
 ```
 
 ### Cache Validation

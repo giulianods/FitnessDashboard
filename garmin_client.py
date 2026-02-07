@@ -58,6 +58,18 @@ class GarminClient:
         except Exception as e:
             raise Exception(f"Failed to login to Garmin Connect: {e}")
     
+    def _is_future_date(self, date: datetime) -> bool:
+        """
+        Check if a date is in the future
+        
+        Args:
+            date: Date to check
+            
+        Returns:
+            True if date is in the future, False otherwise
+        """
+        return date.date() > datetime.now().date()
+    
     def get_heart_rate_data(self, date: datetime) -> List[Dict]:
         """
         Get heart rate data for a specific date
@@ -69,6 +81,11 @@ class GarminClient:
         Returns:
             List of heart rate data points with timestamps
         """
+        # Skip future dates entirely - they never have data
+        if self._is_future_date(date):
+            print(f"Skipping future date: {date.strftime('%Y-%m-%d')}")
+            return None
+        
         # Check cache first
         if self.use_cache and self.cache:
             cached_data = self.cache.get_heart_rate_data(date)
@@ -88,14 +105,20 @@ class GarminClient:
             
             if not hr_data:
                 print(f"No heart rate data found for {date_str}")
-                return []
+                # Cache None for past dates (not future dates which are already filtered)
+                if self.use_cache and self.cache:
+                    self.cache.set_heart_rate_data(date, None)
+                return None
             
             # Parse the heart rate values
             heart_rate_values = hr_data.get('heartRateValues', [])
             
             if not heart_rate_values:
                 print(f"No heart rate values found for {date_str}")
-                return []
+                # Cache None for past dates
+                if self.use_cache and self.cache:
+                    self.cache.set_heart_rate_data(date, None)
+                return None
             
             # Convert to list of dicts with timestamp and value
             parsed_data = []
@@ -143,6 +166,11 @@ class GarminClient:
         Returns:
             HRV value (average overnight HRV in milliseconds) or None if not available
         """
+        # Skip future dates entirely - they never have data
+        if self._is_future_date(date):
+            print(f"Skipping future date for HRV: {date.strftime('%Y-%m-%d')}")
+            return None
+        
         # Check cache first
         if self.use_cache and self.cache:
             cached_value = self.cache.get_hrv_data(date)

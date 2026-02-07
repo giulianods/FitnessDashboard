@@ -109,6 +109,12 @@ class CacheManager:
             # Check if cache is still valid
             if self._is_cache_valid(cached_at):
                 print(f"Cache HIT for HR data {date_str} (cached at {cached_at})")
+                
+                # Check if this is a cached None value
+                if data_json == '"NO_DATA"':
+                    print(f"Cached None value for {date_str} (no data available)")
+                    return None
+                
                 # Parse JSON back to list of dicts with datetime objects
                 data = json.loads(data_json)
                 # Convert timestamp strings back to datetime objects
@@ -123,27 +129,33 @@ class CacheManager:
         print(f"Cache MISS for HR data {date_str}")
         return None
     
-    def set_heart_rate_data(self, date: datetime, data: List[Dict]) -> None:
+    def set_heart_rate_data(self, date: datetime, data: Optional[List[Dict]]) -> None:
         """
         Cache heart rate data for a specific date
         
         Args:
             date: Date of the data
-            data: List of heart rate data points
+            data: List of heart rate data points, or None if no data available
         """
         date_str = date.strftime('%Y-%m-%d')
         cached_at = datetime.now().isoformat()
         
-        # Convert datetime objects to ISO format strings for JSON serialization
-        serializable_data = []
-        for point in data:
-            serializable_point = {
-                'timestamp': point['timestamp'].isoformat() if isinstance(point.get('timestamp'), datetime) else point['timestamp'],
-                'heart_rate': point['heart_rate']
-            }
-            serializable_data.append(serializable_point)
-        
-        data_json = json.dumps(serializable_data)
+        # Handle None values (no data available for this date)
+        if data is None:
+            data_json = json.dumps("NO_DATA")
+            print(f"Caching None value for {date_str} (no data available)")
+        else:
+            # Convert datetime objects to ISO format strings for JSON serialization
+            serializable_data = []
+            for point in data:
+                serializable_point = {
+                    'timestamp': point['timestamp'].isoformat() if isinstance(point.get('timestamp'), datetime) else point['timestamp'],
+                    'heart_rate': point['heart_rate']
+                }
+                serializable_data.append(serializable_point)
+            
+            data_json = json.dumps(serializable_data)
+            print(f"Cached HR data for {date_str} ({len(data)} points)")
         
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
@@ -154,8 +166,6 @@ class CacheManager:
             ''', (date_str, data_json, cached_at))
             
             conn.commit()
-        
-        print(f"Cached HR data for {date_str} ({len(data)} points)")
     
     def get_hrv_data(self, date: datetime) -> Optional[float]:
         """
