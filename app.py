@@ -715,20 +715,24 @@ def get_historical_data():
                 hr_data = client.get_heart_rate_data(current_date)
                 hrv_data = client.get_hrv_data(current_date)
                 
-                if hr_data:
-                    weeks_data[date_str] = {
-                        'hr_data': hr_data,
-                        'hrv': hrv_data
-                    }
-                    # Only include in stats if within display period
-                    if current_date >= start_date:
-                        all_heart_rates.extend([point['heart_rate'] for point in hr_data])
+                # ALWAYS add date to weeks_data, even if no HR data
+                # This ensures all dates are in the dictionary for proper moving average calculation
+                weeks_data[date_str] = {
+                    'hr_data': hr_data if hr_data else [],
+                    'hrv': hrv_data
+                }
+                
+                # Only include in stats if within display period and has data
+                if hr_data and current_date >= start_date:
+                    all_heart_rates.extend([point['heart_rate'] for point in hr_data])
             except Exception as e:
                 print(f"Warning: Could not fetch data for {date_str}: {e}")
             
             current_date += timedelta(days=1)
         
-        if not weeks_data:
+        # Check if we have any actual HR data (not just empty dates)
+        has_data = any(entry.get('hr_data') for entry in weeks_data.values())
+        if not has_data:
             return jsonify({
                 'error': f'No heart rate data found for the last {weeks} weeks',
                 'message': 'No activity was recorded in this period or data has not synced yet'
@@ -817,20 +821,24 @@ def get_monthly_data():
                 hr_data = client.get_heart_rate_data(current_date)
                 hrv_data = client.get_hrv_data(current_date)
                 
-                if hr_data:
-                    month_data[date_str] = {
-                        'hr_data': hr_data,
-                        'hrv': hrv_data
-                    }
-                    # Only include in stats if within display period
-                    if current_date >= start_date:
-                        all_heart_rates.extend([point['heart_rate'] for point in hr_data])
+                # ALWAYS add date to month_data, even if no HR data
+                # This ensures all dates are in the dictionary for proper moving average calculation
+                month_data[date_str] = {
+                    'hr_data': hr_data if hr_data else [],
+                    'hrv': hrv_data
+                }
+                
+                # Only include in stats if within display period and has data
+                if hr_data and current_date >= start_date:
+                    all_heart_rates.extend([point['heart_rate'] for point in hr_data])
             except Exception as e:
                 print(f"Warning: Could not fetch data for {date_str}: {e}")
             
             current_date += timedelta(days=1)
         
-        if not month_data:
+        # Check if we have any actual HR data (not just empty dates)
+        has_data = any(entry.get('hr_data') for entry in month_data.values())
+        if not has_data:
             month_names = ['January', 'February', 'March', 'April', 'May', 'June',
                           'July', 'August', 'September', 'October', 'November', 'December']
             return jsonify({
