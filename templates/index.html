@@ -692,23 +692,37 @@
             chartDiv.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading week data...</p></div>';
             
             fetch(`/get_weekly_data?year=${year}&week=${week}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.error) {
-                        chartDiv.innerHTML = `<div class="error-message">${data.error}</div>`;
-                        return;
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(err => {
+                            throw new Error(err.error || 'Failed to load data');
+                        });
                     }
+                    return response.json();
+                })
+                .then(data => {
+                    // Parse chart JSON string
+                    const chartData = JSON.parse(data.chart);
                     
-                    // Display the chart
+                    // Clear and display the chart
                     chartDiv.innerHTML = '';
-                    Plotly.newPlot('weekly-chart', data.chart.data, data.chart.layout, {responsive: true});
+                    Plotly.newPlot('weekly-chart', chartData.data, chartData.layout, {
+                        responsive: true,
+                        displayModeBar: true,
+                        displaylogo: false
+                    });
                     
                     // Display statistics
                     displayWeeklyStats(data.stats);
                 })
                 .catch(error => {
                     console.error('Error loading weekly data:', error);
-                    chartDiv.innerHTML = '<div class="error-message">Error loading data. Please try again.</div>';
+                    chartDiv.innerHTML = `
+                        <div class="error">
+                            <h3>⚠️ Error Loading Data</h3>
+                            <p>${error.message}</p>
+                        </div>
+                    `;
                 });
         }
         
