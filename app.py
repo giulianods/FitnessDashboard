@@ -789,12 +789,6 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
     
     # Update layout
     fig.update_layout(
-        title={
-            'text': f'Historical Trends - Last {len(dates)} Days',
-            'x': 0.5,
-            'xanchor': 'center',
-            'font': {'size': 20, 'color': '#333'}
-        },
         plot_bgcolor='white',
         paper_bgcolor='white',
         font=dict(family='Arial, sans-serif', size=11, color='#333'),
