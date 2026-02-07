@@ -1037,6 +1037,105 @@ def get_monthly_data():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/get_weekly_data')
+def get_weekly_data():
+    """Get heart rate data for a specific calendar week"""
+    try:
+        year = int(request.args.get('year'))
+        week = int(request.args.get('week'))
+        
+        # Calculate week boundaries using ISO 8601 (Monday is start of week)
+        # Week 1 is the first week containing at least 4 days of January
+        jan_4 = datetime(year, 1, 4)
+        week_1_monday = jan_4 - timedelta(days=jan_4.weekday())  # Monday of week 1
+        start_date = week_1_monday + timedelta(weeks=week-1)
+        end_date = start_date + timedelta(days=6)  # Sunday
+        
+        # Don't go beyond today for current/future weeks
+        today = datetime.now().date()
+        end_date_date = min(end_date.date(), today)
+        end_date = datetime.combine(end_date_date, datetime.min.time())
+        
+        # Calculate display days
+        display_days = (end_date - start_date).days + 1
+        
+        # Fixed 28-day (4-week) moving average
+        ma_window = 28
+        prefetch_days = 27
+        
+        # Calculate prefetch start date
+        prefetch_start_date = start_date - timedelta(days=prefetch_days)
+        
+        # Fetch data for each day in the range (including prefetch)
+        week_data = {}
+        current_date = prefetch_start_date
+        while current_date <= end_date:
+            date_str = current_date.strftime('%Y-%m-%d')
+            hr_data = garmin_client.get_heart_rate_data(current_date)
+            hrv_data = garmin_client.get_hrv_data(current_date)
+            
+            # Always add date to maintain chronological order
+            week_data[date_str] = {
+                'hr_data': hr_data if hr_data else [],
+                'hrv': hrv_data
+            }
+            
+            current_date += timedelta(days=1)
+        
+        # Check if we have any data
+        has_data = any(entry.get('hr_data') for entry in week_data.values())
+        
+        if not has_data:
+            return jsonify({
+                'error': f'No heart rate data found for week {week} of {year}'
+            }), 404
+        
+        # Create historical chart with display start date
+        chart_json, zone_times = create_historical_chart_json(
+            week_data,
+            display_days=display_days,
+            display_start_date=start_date.strftime('%Y-%m-%d')
+        )
+        
+        # Calculate statistics for the week
+        all_hrs = []
+        waking_hrs = []
+        for date_str, data in week_data.items():
+            date_obj = datetime.strptime(date_str, '%Y-%m-%d')
+            # Only include dates in display period (not prefetch)
+            if date_obj >= start_date:
+                hr_data = data.get('hr_data', [])
+                if hr_data:
+                    for point in hr_data:
+                        all_hrs.append(point['heart_rate'])
+                        hour = point['timestamp'].hour
+                        if 6 <= hour < 22:
+                            waking_hrs.append(point['heart_rate'])
+        
+        stats = {
+            'avg_hr': round(sum(waking_hrs) / len(waking_hrs)) if waking_hrs else 0,
+            'max_hr': max(all_hrs) if all_hrs else 0,
+            'min_waking_hr': min(waking_hrs) if waking_hrs else 0,
+            'time_in_z2': zone_times.get('Z2', 0),
+            'time_in_z4_z5': zone_times.get('Z4', 0) + zone_times.get('Z5', 0)
+        }
+        
+        return jsonify({
+            'chart': chart_json,
+            'stats': stats,
+            'start_date': start_date.strftime('%Y-%m-%d'),
+            'end_date': end_date.strftime('%Y-%m-%d'),
+            'year': year,
+            'week': week,
+            'days_with_data': sum(1 for d in week_data if d >= start_date.strftime('%Y-%m-%d'))
+        })
+        
+    except ValueError:
+        return jsonify({'error': 'Invalid year or week parameter'}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 if __name__ == '__main__':
     import os
     print("Starting Fitness Dashboard Web App...")
