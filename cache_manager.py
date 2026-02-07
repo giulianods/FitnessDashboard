@@ -11,11 +11,11 @@ from pathlib import Path
 
 
 class CacheManager:
-    """Manages local caching of Garmin data using SQLite"""
+    """Manages local caching of Garmin data using SQLite with in-memory layer"""
     
     def __init__(self, cache_dir: str = "data", cache_hours: int = 24):
         """
-        Initialize cache manager
+        Initialize cache manager with two-tier caching (memory + database)
         
         Args:
             cache_dir: Directory to store cache database
@@ -24,6 +24,13 @@ class CacheManager:
         self.cache_dir = Path(cache_dir)
         self.cache_hours = cache_hours
         self.db_path = self.cache_dir / "garmin_cache.db"
+        
+        # In-memory cache for ultra-fast lookups (no disk I/O)
+        # Structure: {'hr': {date_str: (data, cached_at)}, 'hrv': {date_str: (value, cached_at)}}
+        self._memory_cache = {
+            'hr': {},
+            'hrv': {}
+        }
         
         # Create cache directory if it doesn't exist
         self.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -84,6 +91,7 @@ class CacheManager:
     def get_heart_rate_data(self, date: datetime) -> Optional[List[Dict]]:
         """
         Get cached heart rate data for a specific date
+        Uses two-tier cache: memory first, then database
         
         Args:
             date: Date to retrieve data for
@@ -93,6 +101,18 @@ class CacheManager:
         """
         date_str = date.strftime('%Y-%m-%d')
         
+        # TIER 1: Check memory cache first (ultra-fast, no disk I/O)
+        if date_str in self._memory_cache['hr']:
+            data, cached_at = self._memory_cache['hr'][date_str]
+            if self._is_cache_valid(cached_at):
+                print(f"Memory cache HIT for HR data {date_str}")
+                return data
+            else:
+                # Expired in memory, remove it
+                print(f"Memory cache EXPIRED for HR data {date_str}")
+                del self._memory_cache['hr'][date_str]
+        
+        # TIER 2: Check database cache (persistent)
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             
@@ -108,11 +128,13 @@ class CacheManager:
             
             # Check if cache is still valid
             if self._is_cache_valid(cached_at):
-                print(f"Cache HIT for HR data {date_str} (cached at {cached_at})")
+                print(f"Database cache HIT for HR data {date_str} (cached at {cached_at})")
                 
                 # Check if this is a cached None value
                 if data_json == '"NO_DATA"':
                     print(f"Cached None value for {date_str} (no data available)")
+                    # Store None in memory cache
+                    self._memory_cache['hr'][date_str] = (None, cached_at)
                     return None
                 
                 # Parse JSON back to list of dicts with datetime objects
@@ -120,9 +142,12 @@ class CacheManager:
                 # Convert timestamp strings back to datetime objects
                 for point in data:
                     point['timestamp'] = datetime.fromisoformat(point['timestamp'])
+                
+                # Store in memory cache for next time
+                self._memory_cache['hr'][date_str] = (data, cached_at)
                 return data
             else:
-                print(f"Cache EXPIRED for HR data {date_str}")
+                print(f"Database cache EXPIRED for HR data {date_str}")
                 # Clean up expired cache
                 self._delete_heart_rate_data(date)
         
@@ -131,7 +156,7 @@ class CacheManager:
     
     def set_heart_rate_data(self, date: datetime, data: Optional[List[Dict]]) -> None:
         """
-        Cache heart rate data for a specific date
+        Cache heart rate data for a specific date in both database and memory
         
         Args:
             date: Date of the data
@@ -144,6 +169,8 @@ class CacheManager:
         if data is None:
             data_json = json.dumps("NO_DATA")
             print(f"Caching None value for {date_str} (no data available)")
+            # Store None in memory cache
+            self._memory_cache['hr'][date_str] = (None, cached_at)
         else:
             # Convert datetime objects to ISO format strings for JSON serialization
             serializable_data = []
@@ -156,7 +183,10 @@ class CacheManager:
             
             data_json = json.dumps(serializable_data)
             print(f"Cached HR data for {date_str} ({len(data)} points)")
+            # Store in memory cache
+            self._memory_cache['hr'][date_str] = (data, cached_at)
         
+        # Store in database (persistent)
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             
@@ -170,6 +200,7 @@ class CacheManager:
     def get_hrv_data(self, date: datetime) -> Optional[float]:
         """
         Get cached HRV data for a specific date
+        Uses two-tier cache: memory first, then database
         
         Args:
             date: Date to retrieve data for
@@ -179,6 +210,18 @@ class CacheManager:
         """
         date_str = date.strftime('%Y-%m-%d')
         
+        # TIER 1: Check memory cache first (ultra-fast)
+        if date_str in self._memory_cache['hrv']:
+            value, cached_at = self._memory_cache['hrv'][date_str]
+            if self._is_cache_valid(cached_at):
+                print(f"Memory cache HIT for HRV data {date_str}")
+                return value
+            else:
+                # Expired in memory, remove it
+                print(f"Memory cache EXPIRED for HRV data {date_str}")
+                del self._memory_cache['hrv'][date_str]
+        
+        # TIER 2: Check database cache (persistent)
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             
@@ -194,10 +237,12 @@ class CacheManager:
             
             # Check if cache is still valid
             if self._is_cache_valid(cached_at):
-                print(f"Cache HIT for HRV data {date_str} (cached at {cached_at})")
+                print(f"Database cache HIT for HRV data {date_str} (cached at {cached_at})")
+                # Store in memory cache for next time
+                self._memory_cache['hrv'][date_str] = (value, cached_at)
                 return value
             else:
-                print(f"Cache EXPIRED for HRV data {date_str}")
+                print(f"Database cache EXPIRED for HRV data {date_str}")
                 # Clean up expired cache
                 self._delete_hrv_data(date)
         
@@ -206,7 +251,7 @@ class CacheManager:
     
     def set_hrv_data(self, date: datetime, value: Optional[float]) -> None:
         """
-        Cache HRV data for a specific date
+        Cache HRV data for a specific date in both database and memory
         
         Args:
             date: Date of the data
@@ -215,6 +260,7 @@ class CacheManager:
         date_str = date.strftime('%Y-%m-%d')
         cached_at = datetime.now().isoformat()
         
+        # Store in database (persistent)
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             
@@ -225,19 +271,33 @@ class CacheManager:
             
             conn.commit()
         
+        # Store in memory cache
+        self._memory_cache['hrv'][date_str] = (value, cached_at)
         print(f"Cached HRV data for {date_str} (value: {value})")
     
     def _delete_heart_rate_data(self, date: datetime) -> None:
-        """Delete heart rate data for a specific date"""
+        """Delete heart rate data for a specific date from both database and memory"""
         date_str = date.strftime('%Y-%m-%d')
+        
+        # Remove from memory cache if present
+        if date_str in self._memory_cache['hr']:
+            del self._memory_cache['hr'][date_str]
+        
+        # Remove from database
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute('DELETE FROM heart_rate_data WHERE date = ?', (date_str,))
             conn.commit()
     
     def _delete_hrv_data(self, date: datetime) -> None:
-        """Delete HRV data for a specific date"""
+        """Delete HRV data for a specific date from both database and memory"""
         date_str = date.strftime('%Y-%m-%d')
+        
+        # Remove from memory cache if present
+        if date_str in self._memory_cache['hrv']:
+            del self._memory_cache['hrv'][date_str]
+        
+        # Remove from database
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute('DELETE FROM hrv_data WHERE date = ?', (date_str,))
@@ -245,7 +305,7 @@ class CacheManager:
     
     def cleanup_expired(self) -> Dict[str, int]:
         """
-        Remove all expired cache entries
+        Remove all expired cache entries from both database and memory
         
         Returns:
             Dictionary with counts of deleted entries
@@ -253,6 +313,22 @@ class CacheManager:
         expiry_time = datetime.now() - timedelta(hours=self.cache_hours)
         expiry_str = expiry_time.isoformat()
         
+        # Clean expired entries from memory cache
+        expired_hr_keys = [
+            date_str for date_str, (_, cached_at) in self._memory_cache['hr'].items()
+            if not self._is_cache_valid(cached_at)
+        ]
+        expired_hrv_keys = [
+            date_str for date_str, (_, cached_at) in self._memory_cache['hrv'].items()
+            if not self._is_cache_valid(cached_at)
+        ]
+        
+        for key in expired_hr_keys:
+            del self._memory_cache['hr'][key]
+        for key in expired_hrv_keys:
+            del self._memory_cache['hrv'][key]
+        
+        # Clean expired entries from database
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             
@@ -273,13 +349,20 @@ class CacheManager:
             conn.commit()
         
         if hr_deleted > 0 or hrv_deleted > 0:
-            print(f"Cleaned up {hr_deleted} HR entries and {hrv_deleted} HRV entries")
+            print(f"Cleaned up {hr_deleted} HR entries and {hrv_deleted} HRV entries from database")
+        if len(expired_hr_keys) > 0 or len(expired_hrv_keys) > 0:
+            print(f"Cleaned up {len(expired_hr_keys)} HR entries and {len(expired_hrv_keys)} HRV entries from memory")
         
-        return {'hr_deleted': hr_deleted, 'hrv_deleted': hrv_deleted}
+        return {
+            'hr_deleted': hr_deleted, 
+            'hrv_deleted': hrv_deleted,
+            'hr_memory_deleted': len(expired_hr_keys),
+            'hrv_memory_deleted': len(expired_hrv_keys)
+        }
     
     def get_cache_stats(self) -> Dict[str, int]:
         """
-        Get statistics about cached data
+        Get statistics about cached data in both database and memory
         
         Returns:
             Dictionary with cache statistics
@@ -294,13 +377,25 @@ class CacheManager:
             hrv_count = cursor.fetchone()[0]
         
         return {
-            'hr_entries': hr_count,
-            'hrv_entries': hrv_count,
-            'total_entries': hr_count + hrv_count
+            'database': {
+                'hr_entries': hr_count,
+                'hrv_entries': hrv_count,
+                'total_entries': hr_count + hrv_count
+            },
+            'memory': {
+                'hr_entries': len(self._memory_cache['hr']),
+                'hrv_entries': len(self._memory_cache['hrv']),
+                'total_entries': len(self._memory_cache['hr']) + len(self._memory_cache['hrv'])
+            }
         }
     
     def clear_all(self) -> None:
-        """Clear all cached data"""
+        """Clear all cached data from both database and memory"""
+        # Clear memory cache
+        self._memory_cache['hr'].clear()
+        self._memory_cache['hrv'].clear()
+        
+        # Clear database cache
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             
@@ -309,4 +404,27 @@ class CacheManager:
             
             conn.commit()
         
-        print("Cleared all cached data")
+        print("Cleared all cached data from database and memory")
+    
+    def clear_memory_cache(self) -> None:
+        """Clear only the in-memory cache (database cache remains)"""
+        hr_count = len(self._memory_cache['hr'])
+        hrv_count = len(self._memory_cache['hrv'])
+        
+        self._memory_cache['hr'].clear()
+        self._memory_cache['hrv'].clear()
+        
+        print(f"Cleared memory cache: {hr_count} HR entries, {hrv_count} HRV entries")
+    
+    def get_memory_cache_stats(self) -> Dict[str, int]:
+        """
+        Get statistics about in-memory cache only
+        
+        Returns:
+            Dictionary with memory cache statistics
+        """
+        return {
+            'hr_entries': len(self._memory_cache['hr']),
+            'hrv_entries': len(self._memory_cache['hrv']),
+            'total_entries': len(self._memory_cache['hr']) + len(self._memory_cache['hrv'])
+        }
