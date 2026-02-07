@@ -485,12 +485,12 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
         else:
             total_zone_times[zone] = 0
     
-    # Calculate moving average window size (1/4 of display period)
+    # Calculate moving average window size (full display period)
     if display_days:
-        ma_window = max(1, display_days // 4)
+        ma_window = max(1, display_days)
     else:
         # Default based on number of dates
-        ma_window = max(1, len(dates) // 4)
+        ma_window = max(1, len(dates))
     
     # Calculate moving averages for Min HR and HRV
     daily_mins_ma = calculate_moving_average(daily_mins, ma_window)
@@ -736,16 +736,16 @@ def get_historical_data():
         # Get Garmin client
         client = get_garmin_client()
         
-        # Calculate display period and moving average window
+        # Calculate display period and moving average window (full display period)
         display_days = weeks * 7
-        ma_window = max(1, display_days // 4)
+        ma_window = max(1, display_days)
         
         # Fetch data for the last N weeks (excluding today)
         # Also fetch extra data for moving average calculation
         end_date = datetime.now() - timedelta(days=1)  # Exclude today
         start_date = end_date - timedelta(weeks=weeks)
         
-        # Fetch additional data before start_date for moving average
+        # Fetch additional data before start_date for moving average (full period - 1)
         prefetch_start_date = start_date - timedelta(days=ma_window - 1)
         
         weeks_data = {}
@@ -850,11 +850,11 @@ def get_monthly_data():
         else:
             end_date = datetime(year, month + 1, 1) - timedelta(days=1)
         
-        # Calculate display period and moving average window
+        # Calculate display period and moving average window (full display period)
         display_days = (end_date - start_date).days + 1
-        ma_window = max(1, display_days // 4)
+        ma_window = max(1, display_days)
         
-        # Fetch additional data before start_date for moving average
+        # Fetch additional data before start_date for moving average (full period - 1)
         prefetch_start_date = start_date - timedelta(days=ma_window - 1)
         
         # Fetch data for all days in the month (plus prefetch period)

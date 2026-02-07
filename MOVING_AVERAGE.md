@@ -11,17 +11,17 @@ Moving average lines have been added to two charts:
 2. **Chart D: Daily HRV** - Shows moving average for HRV (Heart Rate Variability)
 
 ### Moving Average Window Calculation
-The moving average window is automatically calculated as **1/4 of the displayed period**:
+The moving average window equals the **full displayed period**:
 
 | Display Period | Days | MA Window | 
 |---------------|------|-----------|
-| 4 weeks | 28 | 7 days |
-| 8 weeks | 56 | 14 days |
-| 12 weeks | 84 | 21 days |
-| 16 weeks | 112 | 28 days |
-| 24 weeks | 168 | 42 days |
-| 48 weeks | 336 | 84 days |
-| Monthly | ~30 | ~7 days |
+| 4 weeks | 28 | 28 days |
+| 8 weeks | 56 | 56 days |
+| 12 weeks | 84 | 84 days |
+| 16 weeks | 112 | 112 days |
+| 24 weeks | 168 | 168 days |
+| 48 weeks | 336 | 336 days |
+| Monthly | ~30 | ~30 days |
 
 ### Key Features
 
@@ -76,11 +76,11 @@ Both `get_historical_data()` and `get_monthly_data()` functions were modified to
 ### Data Flow
 
 ```
-User selects period (e.g., 4 weeks)
+User selects period (e.g., 4 weeks = 28 days)
     ↓
-Calculate MA window (4 weeks * 7 days / 4 = 7 days)
+Calculate MA window (28 days = full period)
     ↓
-Fetch data from (start_date - 6 days) to end_date
+Fetch data from (start_date - 27 days) to end_date
     ↓
 Calculate moving averages on all fetched data
     ↓
@@ -91,27 +91,27 @@ Display only the requested period with MA starting from day 1
 
 For a 4-week (28 days) view:
 - **Display period**: Days 1-28 (last 4 weeks)
-- **Prefetch period**: Days -6 to 0 (6 days before)
-- **Total data fetched**: 35 days
-- **MA window**: 7 days
-- **MA calculation**: Each point uses up to 7 previous days (including prefetch)
-- **Result**: MA line starts from day 1 with proper context
+- **Prefetch period**: Days -27 to 0 (27 days before)
+- **Total data fetched**: 55 days
+- **MA window**: 28 days (full display period)
+- **MA calculation**: Each point uses 28 previous days (including prefetch)
+- **Result**: MA line starts from day 1 with full 28-day context
 
 ## Visual Design
 
 ### Color Scheme
 ```
-Raw Data (light) → Moving Average (dark)
+Raw Data (light) → Moving Average (contrasting)
 
-Min HR:  Light Blue (#4A90E2) → Dark Blue (#1E3A8A)
-HRV:     Light Purple (#9B59B6) → Dark Purple (#6A1B9A)
+Min HR:  Light Blue (#4A90E2) → Orange (#FF6B35)
+HRV:     Light Purple (#9B59B6) → Green (#28B463)
 ```
 
 ### Line Styles
 - **Raw data**: Lines + markers (width=2, size=6)
-- **Moving average**: Lines only (width=3, no markers)
+- **Moving average**: Lines only (width=2, no markers)
 
-This creates clear visual distinction while maintaining cohesive color families.
+This creates clear visual distinction with complementary color contrasts.
 
 ## Benefits
 
