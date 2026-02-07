@@ -546,9 +546,9 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
         column_widths=[0.5, 0.5],
         subplot_titles=(
             'Daily Min/Max Heart Rate',
-            'Time in Each Zone',
+            'Time in Each Zone (Waking Hours)',
             'Daily HRV',
-            'Heart Rate Distribution'
+            'Heart Rate Distribution (Waking Hours)'
         ),
         specs=[[{}, {}],
                [{}, {}]],
@@ -679,6 +679,7 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
             ), row=2, col=1)
     
     # Chart C: Heart rate distribution with lognormal fit (positioned at row 2, col 2)
+    # Note: all_waking_hrs contains ONLY waking hours data (6:00-22:00), filtered at lines 504-510
     if all_waking_hrs:
         # Calculate bin colors for rainbow gradient (purple for low HR, red for high HR)
         min_hr_val = min(all_waking_hrs)
