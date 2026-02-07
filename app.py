@@ -386,7 +386,7 @@ def calculate_moving_average(values, window_size):
     return result
 
 
-def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days=None):
+def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days=None, display_start_date=None):
     """
     Create chart JSON for historical trends with 4 subplots:
     - Chart A: Daily min/max heart rate over time
@@ -398,6 +398,7 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
         weeks_data: Dictionary with dates as keys and dict with 'hr_data' and 'hrv' as values
         max_hr: Maximum heart rate for calculating cardio zones
         display_days: Number of days in the displayed period (for calculating moving average window)
+        display_start_date: First date to display on chart (YYYY-MM-DD). Dates before this are used for MA calculation only.
     
     Returns:
         JSON string for Plotly chart and zone times
@@ -514,10 +515,18 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
     
     # Chart A: Daily min/max heart rate (no legend)
     # Filter out None values for data points to ensure clean visualization
-    min_hr_dates = [d for d, v in zip(dates, daily_mins) if v is not None]
-    min_hr_values = [v for v in daily_mins if v is not None]
-    max_hr_dates = [d for d, v in zip(dates, daily_maxs) if v is not None]
-    max_hr_values = [v for v in daily_maxs if v is not None]
+    # Filter data points to display period only (dates >= display_start_date)
+    if display_start_date:
+        min_hr_dates = [d for d, v in zip(dates, daily_mins) if d >= display_start_date and v is not None]
+        min_hr_values = [v for d, v in zip(dates, daily_mins) if d >= display_start_date and v is not None]
+        max_hr_dates = [d for d, v in zip(dates, daily_maxs) if d >= display_start_date and v is not None]
+        max_hr_values = [v for d, v in zip(dates, daily_maxs) if d >= display_start_date and v is not None]
+    else:
+        # Fallback: show all dates with data
+        min_hr_dates = [d for d, v in zip(dates, daily_mins) if v is not None]
+        min_hr_values = [v for v in daily_mins if v is not None]
+        max_hr_dates = [d for d, v in zip(dates, daily_maxs) if v is not None]
+        max_hr_values = [v for v in daily_maxs if v is not None]
     
     fig.add_trace(go.Scatter(
         x=min_hr_dates,
@@ -540,12 +549,19 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
     ), row=1, col=1)
     
     # Add moving average for Min HR
-    # Only show MA for dates that have actual HR data (not None)
-    # This ensures MA stops at the last data point and doesn't extend into future
-    min_hr_ma_dates = [d for d, v, ma in zip(dates, daily_mins, daily_mins_ma) 
-                       if v is not None and ma is not None]
-    min_hr_ma_values = [ma for v, ma in zip(daily_mins, daily_mins_ma) 
-                        if v is not None and ma is not None]
+    # Show MA for display period dates (calculated from all dates including prefetch)
+    # This ensures proper MA values from first display date using prefetch data
+    if display_start_date:
+        min_hr_ma_dates = [d for d, ma in zip(dates, daily_mins_ma) 
+                           if d >= display_start_date and ma is not None]
+        min_hr_ma_values = [ma for d, ma in zip(dates, daily_mins_ma) 
+                            if d >= display_start_date and ma is not None]
+    else:
+        # Fallback: Only show MA where data exists
+        min_hr_ma_dates = [d for d, v, ma in zip(dates, daily_mins, daily_mins_ma) 
+                           if v is not None and ma is not None]
+        min_hr_ma_values = [ma for v, ma in zip(daily_mins, daily_mins_ma) 
+                            if v is not None and ma is not None]
     
     if min_hr_ma_dates:
         fig.add_trace(go.Scatter(
@@ -575,9 +591,14 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
     ), row=1, col=2)
     
     # Chart D: Daily HRV (positioned at row 2, col 1)
-    # Filter out None values for plotting data points only
-    hrv_dates = [date for date, hrv in zip(dates, daily_hrvs) if hrv is not None]
-    hrv_values = [v for v in daily_hrvs if v is not None]
+    # Filter HRV data points to display period only
+    if display_start_date:
+        hrv_dates = [date for date, hrv in zip(dates, daily_hrvs) if date >= display_start_date and hrv is not None]
+        hrv_values = [v for date, v in zip(dates, daily_hrvs) if date >= display_start_date and v is not None]
+    else:
+        # Fallback: show all dates with HRV data
+        hrv_dates = [date for date, hrv in zip(dates, daily_hrvs) if hrv is not None]
+        hrv_values = [v for v in daily_hrvs if v is not None]
     
     if hrv_values:
         fig.add_trace(go.Scatter(
@@ -591,12 +612,18 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
         ), row=2, col=1)
         
         # Add moving average for HRV
-        # Only show MA for dates that have actual HRV data (not None)
-        # This ensures MA stops at the last data point and doesn't extend into future
-        hrv_ma_dates = [date for date, hrv, ma in zip(dates, daily_hrvs, hrv_values_ma) 
-                        if hrv is not None and ma is not None]
-        hrv_ma_vals = [ma for hrv, ma in zip(daily_hrvs, hrv_values_ma) 
-                       if hrv is not None and ma is not None]
+        # Show HRV MA for display period dates (calculated from all dates including prefetch)
+        if display_start_date:
+            hrv_ma_dates = [date for date, ma in zip(dates, hrv_values_ma) 
+                            if date >= display_start_date and ma is not None]
+            hrv_ma_vals = [ma for date, ma in zip(dates, hrv_values_ma) 
+                           if date >= display_start_date and ma is not None]
+        else:
+            # Fallback: Only show MA where HRV data exists
+            hrv_ma_dates = [date for date, hrv, ma in zip(dates, daily_hrvs, hrv_values_ma) 
+                            if hrv is not None and ma is not None]
+            hrv_ma_vals = [ma for hrv, ma in zip(daily_hrvs, hrv_values_ma) 
+                           if hrv is not None and ma is not None]
         
         if hrv_ma_dates:
             fig.add_trace(go.Scatter(
@@ -754,8 +781,12 @@ def get_historical_data():
                 'message': 'No activity was recorded in this period or data has not synced yet'
             }), 404
         
-        # Create historical chart JSON with display_days parameter
-        chart_json, zone_times = create_historical_chart_json(weeks_data, display_days=display_days)
+        # Create historical chart JSON with display_days and display_start_date parameters
+        chart_json, zone_times = create_historical_chart_json(
+            weeks_data, 
+            display_days=display_days,
+            display_start_date=start_date.strftime('%Y-%m-%d')
+        )
         
         # Calculate statistics for the entire period (only display period, not prefetch)
         if all_heart_rates:
@@ -862,8 +893,12 @@ def get_monthly_data():
                 'message': 'No activity was recorded in this month or data has not synced yet'
             }), 404
         
-        # Create historical chart JSON (reuse the same function) with display_days parameter
-        chart_json, zone_times = create_historical_chart_json(month_data, display_days=display_days)
+        # Create historical chart JSON (reuse the same function) with display_days and display_start_date parameters
+        chart_json, zone_times = create_historical_chart_json(
+            month_data,
+            display_days=display_days,
+            display_start_date=start_date.strftime('%Y-%m-%d')
+        )
         
         # Calculate statistics for the entire month (only display period, not prefetch)
         if all_heart_rates:
