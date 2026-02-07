@@ -540,9 +540,12 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
     ), row=1, col=1)
     
     # Add moving average for Min HR
-    # Filter out None values for MA to ensure it aligns with dates
-    min_hr_ma_dates = [d for d, ma in zip(dates, daily_mins_ma) if ma is not None]
-    min_hr_ma_values = [ma for ma in daily_mins_ma if ma is not None]
+    # Only show MA for dates that have actual HR data (not None)
+    # This ensures MA stops at the last data point and doesn't extend into future
+    min_hr_ma_dates = [d for d, v, ma in zip(dates, daily_mins, daily_mins_ma) 
+                       if v is not None and ma is not None]
+    min_hr_ma_values = [ma for v, ma in zip(daily_mins, daily_mins_ma) 
+                        if v is not None and ma is not None]
     
     if min_hr_ma_dates:
         fig.add_trace(go.Scatter(
@@ -588,10 +591,12 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
         ), row=2, col=1)
         
         # Add moving average for HRV
-        # Use ALL dates (including prefetch period) for MA to show full trend from beginning
-        # Filter out only None MA values (not based on raw HRV values)
-        hrv_ma_dates = [date for date, ma in zip(dates, hrv_values_ma) if ma is not None]
-        hrv_ma_vals = [ma for ma in hrv_values_ma if ma is not None]
+        # Only show MA for dates that have actual HRV data (not None)
+        # This ensures MA stops at the last data point and doesn't extend into future
+        hrv_ma_dates = [date for date, hrv, ma in zip(dates, daily_hrvs, hrv_values_ma) 
+                        if hrv is not None and ma is not None]
+        hrv_ma_vals = [ma for hrv, ma in zip(daily_hrvs, hrv_values_ma) 
+                       if hrv is not None and ma is not None]
         
         if hrv_ma_dates:
             fig.add_trace(go.Scatter(
