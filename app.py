@@ -188,10 +188,10 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
         
         # Calculate color for each bin with three-tier gradient:
         # Below Z0 (50% max HR): Dark violet
-        # Z0 to Z2 (50-70% max HR): Violet to Green
-        # Z2 to Max (70-100% max HR): Green to Dark Red
+        # Z0 to Green Point (50-60% max HR): Violet to Green
+        # Green Point to Max (60-100% max HR): Green to Dark Red
         z0_threshold = max_hr * 0.5  # Z0 is 50% of max HR
-        z2_end = max_hr * 0.7  # Z2 ends at 70% of max HR
+        green_point = max_hr * 0.6  # Green at 60% of max HR (~108 bpm for max HR 180)
         bin_colors = []
         for bin_center in bin_centers:
             if bin_center < z0_threshold:
@@ -200,15 +200,15 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
                 hue = 270  # Violet hue
                 sat = 0.7
                 val = 0.3 + 0.2 * position  # 0.3 (darkest) to 0.5 (lighter)
-            elif bin_center < z2_end:
-                # Z0 to Z2: Violet (270°) to Green (120°)
-                position = (bin_center - z0_threshold) / (z2_end - z0_threshold) if z2_end > z0_threshold else 0
+            elif bin_center < green_point:
+                # Z0 to Green Point: Violet (270°) to Green (120°)
+                position = (bin_center - z0_threshold) / (green_point - z0_threshold) if green_point > z0_threshold else 0
                 hue = 270 - (270 - 120) * position  # 270° → 120° (violet to green)
                 sat = 0.8
                 val = 0.9
             else:
-                # Z2 to Max: Green (120°) to Dark Red (0°)
-                position = (bin_center - z2_end) / (max_hr - z2_end) if max_hr > z2_end else 0
+                # Green Point to Max: Green (120°) to Dark Red (0°)
+                position = (bin_center - green_point) / (max_hr - green_point) if max_hr > green_point else 0
                 hue = 120 * (1 - position)  # 120° → 0° (green to red)
                 sat = 0.8
                 val = 0.9 - 0.3 * position  # Darker towards red (0.9 → 0.6)
@@ -707,10 +707,10 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
         
         # Calculate color for each bin with three-tier gradient:
         # Below Z0 (50% max HR): Dark violet
-        # Z0 to Z2 (50-70% max HR): Violet to Green
-        # Z2 to Max (70-100% max HR): Green to Dark Red
+        # Z0 to Green Point (50-60% max HR): Violet to Green
+        # Green Point to Max (60-100% max HR): Green to Dark Red
         z0_threshold = max_hr * 0.5  # Z0 is 50% of max HR
-        z2_end = max_hr * 0.7  # Z2 ends at 70% of max HR
+        green_point = max_hr * 0.6  # Green at 60% of max HR (~108 bpm for max HR 180)
         bin_colors = []
         for bin_center in bin_centers:
             if bin_center < z0_threshold:
@@ -719,15 +719,15 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
                 hue = 270  # Violet hue
                 sat = 0.7
                 val = 0.3 + 0.2 * position  # 0.3 (darkest) to 0.5 (lighter)
-            elif bin_center < z2_end:
-                # Z0 to Z2: Violet (270°) to Green (120°)
-                position = (bin_center - z0_threshold) / (z2_end - z0_threshold) if z2_end > z0_threshold else 0
+            elif bin_center < green_point:
+                # Z0 to Green Point: Violet (270°) to Green (120°)
+                position = (bin_center - z0_threshold) / (green_point - z0_threshold) if green_point > z0_threshold else 0
                 hue = 270 - (270 - 120) * position  # 270° → 120° (violet to green)
                 sat = 0.8
                 val = 0.9
             else:
-                # Z2 to Max: Green (120°) to Dark Red (0°)
-                position = (bin_center - z2_end) / (max_hr - z2_end) if max_hr > z2_end else 0
+                # Green Point to Max: Green (120°) to Dark Red (0°)
+                position = (bin_center - green_point) / (max_hr - green_point) if max_hr > green_point else 0
                 hue = 120 * (1 - position)  # 120° → 0° (green to red)
                 sat = 0.8
                 val = 0.9 - 0.3 * position  # Darker towards red (0.9 → 0.6)
