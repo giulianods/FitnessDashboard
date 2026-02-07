@@ -178,17 +178,29 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
         # Create histogram to get bin edges
         hist_values, bin_edges = np.histogram(waking_hours_hr, bins=nbins)
         
-        # Calculate color for each bin based on its position (purple to red gradient)
-        # HSV: Hue from 270 (purple) to 0 (red), passing through blue, green, yellow, orange
+        # Calculate color for each bin with two-tier gradient:
+        # Below Z0 (50% max HR): Dark purple (night colors)
+        # Z0 and above: Rainbow gradient (purple to red)
+        z0_threshold = max_hr * 0.5  # Z0 is 50% of max HR
         bin_colors = []
         for i in range(len(bin_edges) - 1):
             bin_center = (bin_edges[i] + bin_edges[i+1]) / 2
-            # Normalize position (0 = min HR, 1 = max HR)
-            position = (bin_center - min_hr_val) / (max_hr_val - min_hr_val) if max_hr_val > min_hr_val else 0
-            # Map to hue: 270° (purple) at position 0, to 0° (red) at position 1
-            hue = 270 * (1 - position)  # Reverse: purple (270°) → red (0°)
-            # Convert HSV to RGB (saturation=0.8, value=0.9 for vibrant colors)
-            rgb = tuple(int(x * 255) for x in colorsys.hsv_to_rgb(hue/360, 0.8, 0.9))
+            
+            if bin_center < z0_threshold:
+                # Below Z0: Dark purple (night colors) - darker for lower HR
+                position = bin_center / z0_threshold if z0_threshold > 0 else 0
+                hue = 270  # Purple hue
+                sat = 0.7
+                val = 0.3 + 0.2 * position  # 0.3 (darkest) to 0.5 (lighter)
+            else:
+                # Z0 and above: Rainbow gradient (purple to red)
+                position = (bin_center - z0_threshold) / (max_hr - z0_threshold) if max_hr > z0_threshold else 0
+                hue = 270 * (1 - position)  # 270° (purple) to 0° (red)
+                sat = 0.8
+                val = 0.9
+            
+            # Convert HSV to RGB
+            rgb = tuple(int(x * 255) for x in colorsys.hsv_to_rgb(hue/360, sat, val))
             bin_colors.append(f'rgb({rgb[0]},{rgb[1]},{rgb[2]})')
         
         # Add histogram with gradient colors
@@ -670,17 +682,29 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
         # Create histogram to get bin edges
         hist_values, bin_edges = np.histogram(all_waking_hrs, bins=nbins)
         
-        # Calculate color for each bin based on its position (purple to red gradient)
-        # HSV: Hue from 270 (purple) to 0 (red), passing through blue, green, yellow, orange
+        # Calculate color for each bin with two-tier gradient:
+        # Below Z0 (50% max HR): Dark purple (night colors)
+        # Z0 and above: Rainbow gradient (purple to red)
+        z0_threshold = max_hr * 0.5  # Z0 is 50% of max HR
         bin_colors = []
         for i in range(len(bin_edges) - 1):
             bin_center = (bin_edges[i] + bin_edges[i+1]) / 2
-            # Normalize position (0 = min HR, 1 = max HR)
-            position = (bin_center - min_hr_val) / (max_hr_val - min_hr_val) if max_hr_val > min_hr_val else 0
-            # Map to hue: 270° (purple) at position 0, to 0° (red) at position 1
-            hue = 270 * (1 - position)  # Reverse: purple (270°) → red (0°)
-            # Convert HSV to RGB (saturation=0.8, value=0.9 for vibrant colors)
-            rgb = tuple(int(x * 255) for x in colorsys.hsv_to_rgb(hue/360, 0.8, 0.9))
+            
+            if bin_center < z0_threshold:
+                # Below Z0: Dark purple (night colors) - darker for lower HR
+                position = bin_center / z0_threshold if z0_threshold > 0 else 0
+                hue = 270  # Purple hue
+                sat = 0.7
+                val = 0.3 + 0.2 * position  # 0.3 (darkest) to 0.5 (lighter)
+            else:
+                # Z0 and above: Rainbow gradient (purple to red)
+                position = (bin_center - z0_threshold) / (max_hr - z0_threshold) if max_hr > z0_threshold else 0
+                hue = 270 * (1 - position)  # 270° (purple) to 0° (red)
+                sat = 0.8
+                val = 0.9
+            
+            # Convert HSV to RGB
+            rgb = tuple(int(x * 255) for x in colorsys.hsv_to_rgb(hue/360, sat, val))
             bin_colors.append(f'rgb({rgb[0]},{rgb[1]},{rgb[2]})')
         
         # Add histogram with gradient colors
