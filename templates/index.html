@@ -728,25 +728,27 @@
         
         function displayWeeklyStats(stats) {
             const statsHtml = `
-                <div class="kpi-card">
-                    <div class="kpi-value">${stats.avg_hr}</div>
-                    <div class="kpi-label">Avg HR</div>
-                </div>
-                <div class="kpi-card">
-                    <div class="kpi-value">${stats.max_hr}</div>
-                    <div class="kpi-label">Max HR</div>
-                </div>
-                <div class="kpi-card">
-                    <div class="kpi-value">${stats.min_waking_hr}</div>
-                    <div class="kpi-label">Min Waking HR</div>
-                </div>
-                <div class="kpi-card">
-                    <div class="kpi-value">${stats.time_in_z2}</div>
-                    <div class="kpi-label">Time in Z2 (min)</div>
-                </div>
-                <div class="kpi-card">
-                    <div class="kpi-value">${stats.time_in_z4_z5}</div>
-                    <div class="kpi-label">Time in Z4+5 (min)</div>
+                <div class="stats">
+                    <div class="stat-card">
+                        <h3>Average Heart Rate</h3>
+                        <p>${stats.average} bpm</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Maximum Heart Rate</h3>
+                        <p>${stats.maximum} bpm</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Minimum Heart Rate</h3>
+                        <p>${stats.minimum} bpm</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Time in Z2</h3>
+                        <p>${stats.time_z2}</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Time in Z4+5</h3>
+                        <p>${stats.time_z4_z5}</p>
+                    </div>
                 </div>
             `;
             document.getElementById('weekly-stats-container').innerHTML = statsHtml;

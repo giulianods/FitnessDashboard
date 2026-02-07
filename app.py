@@ -1113,11 +1113,11 @@ def get_weekly_data():
                             waking_hrs.append(point['heart_rate'])
         
         stats = {
-            'avg_hr': round(sum(waking_hrs) / len(waking_hrs)) if waking_hrs else 0,
-            'max_hr': max(all_hrs) if all_hrs else 0,
-            'min_waking_hr': min(waking_hrs) if waking_hrs else 0,
-            'time_in_z2': zone_times.get('Z2', 0),
-            'time_in_z4_z5': zone_times.get('Z4', 0) + zone_times.get('Z5', 0)
+            'average': round(sum(waking_hrs) / len(waking_hrs)) if waking_hrs else 0,
+            'maximum': max(all_hrs) if all_hrs else 0,
+            'minimum': min(waking_hrs) if waking_hrs else 0,
+            'time_z2': format_time(zone_times.get('Z2', 0)),
+            'time_z4_z5': format_time(zone_times.get('Z4', 0) + zone_times.get('Z5', 0))
         }
         
         return jsonify({
