@@ -513,9 +513,15 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
     )
     
     # Chart A: Daily min/max heart rate (no legend)
+    # Filter out None values for data points to ensure clean visualization
+    min_hr_dates = [d for d, v in zip(dates, daily_mins) if v is not None]
+    min_hr_values = [v for v in daily_mins if v is not None]
+    max_hr_dates = [d for d, v in zip(dates, daily_maxs) if v is not None]
+    max_hr_values = [v for v in daily_maxs if v is not None]
+    
     fig.add_trace(go.Scatter(
-        x=dates,
-        y=daily_mins,
+        x=min_hr_dates,
+        y=min_hr_values,
         mode='lines+markers',
         name='Min HR',
         line=dict(color='#4A90E2', width=2),
@@ -524,8 +530,8 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
     ), row=1, col=1)
     
     fig.add_trace(go.Scatter(
-        x=dates,
-        y=daily_maxs,
+        x=max_hr_dates,
+        y=max_hr_values,
         mode='lines+markers',
         name='Max HR',
         line=dict(color='#FF6347', width=2),
@@ -534,14 +540,19 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
     ), row=1, col=1)
     
     # Add moving average for Min HR
-    fig.add_trace(go.Scatter(
-        x=dates,
-        y=daily_mins_ma,
-        mode='lines',
-        name=f'Min HR MA ({ma_window}d)',
-        line=dict(color='#FF6B35', width=2, dash='solid'),  # Orange for contrast with blue
-        showlegend=False
-    ), row=1, col=1)
+    # Filter out None values for MA to ensure it aligns with dates
+    min_hr_ma_dates = [d for d, ma in zip(dates, daily_mins_ma) if ma is not None]
+    min_hr_ma_values = [ma for ma in daily_mins_ma if ma is not None]
+    
+    if min_hr_ma_dates:
+        fig.add_trace(go.Scatter(
+            x=min_hr_ma_dates,
+            y=min_hr_ma_values,
+            mode='lines',
+            name=f'Min HR MA ({ma_window}d)',
+            line=dict(color='#FF6B35', width=2, dash='solid'),  # Orange for contrast with blue
+            showlegend=False
+        ), row=1, col=1)
     
     # Chart B: Time in each zone (horizontal bar chart)
     zone_names = list(garmin_zones.keys())
