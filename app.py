@@ -186,24 +186,32 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
         bin_area = bin_width * len(waking_hours_hr)
         hist_density = hist_values / bin_area
         
-        # Calculate color for each bin with two-tier gradient:
-        # Below Z0 (50% max HR): Dark purple (night colors)
-        # Z0 and above: Rainbow gradient (purple to red)
+        # Calculate color for each bin with three-tier gradient:
+        # Below Z0 (50% max HR): Dark violet
+        # Z0 to Z2 (50-70% max HR): Violet to Green
+        # Z2 to Max (70-100% max HR): Green to Dark Red
         z0_threshold = max_hr * 0.5  # Z0 is 50% of max HR
+        z2_end = max_hr * 0.7  # Z2 ends at 70% of max HR
         bin_colors = []
         for bin_center in bin_centers:
             if bin_center < z0_threshold:
-                # Below Z0: Dark purple (night colors) - darker for lower HR
+                # Below Z0: Dark violet (night colors) - darker for lower HR
                 position = bin_center / z0_threshold if z0_threshold > 0 else 0
-                hue = 270  # Purple hue
+                hue = 270  # Violet hue
                 sat = 0.7
                 val = 0.3 + 0.2 * position  # 0.3 (darkest) to 0.5 (lighter)
-            else:
-                # Z0 and above: Rainbow gradient (purple to red)
-                position = (bin_center - z0_threshold) / (max_hr - z0_threshold) if max_hr > z0_threshold else 0
-                hue = 270 * (1 - position)  # 270° (purple) to 0° (red)
+            elif bin_center < z2_end:
+                # Z0 to Z2: Violet (270°) to Green (120°)
+                position = (bin_center - z0_threshold) / (z2_end - z0_threshold) if z2_end > z0_threshold else 0
+                hue = 270 - (270 - 120) * position  # 270° → 120° (violet to green)
                 sat = 0.8
                 val = 0.9
+            else:
+                # Z2 to Max: Green (120°) to Dark Red (0°)
+                position = (bin_center - z2_end) / (max_hr - z2_end) if max_hr > z2_end else 0
+                hue = 120 * (1 - position)  # 120° → 0° (green to red)
+                sat = 0.8
+                val = 0.9 - 0.3 * position  # Darker towards red (0.9 → 0.6)
             
             # Convert HSV to RGB
             rgb = tuple(int(x * 255) for x in colorsys.hsv_to_rgb(hue/360, sat, val))
@@ -697,24 +705,32 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
         bin_area = bin_width * len(all_waking_hrs)
         hist_density = hist_values / bin_area
         
-        # Calculate color for each bin with two-tier gradient:
-        # Below Z0 (50% max HR): Dark purple (night colors)
-        # Z0 and above: Rainbow gradient (purple to red)
+        # Calculate color for each bin with three-tier gradient:
+        # Below Z0 (50% max HR): Dark violet
+        # Z0 to Z2 (50-70% max HR): Violet to Green
+        # Z2 to Max (70-100% max HR): Green to Dark Red
         z0_threshold = max_hr * 0.5  # Z0 is 50% of max HR
+        z2_end = max_hr * 0.7  # Z2 ends at 70% of max HR
         bin_colors = []
         for bin_center in bin_centers:
             if bin_center < z0_threshold:
-                # Below Z0: Dark purple (night colors) - darker for lower HR
+                # Below Z0: Dark violet (night colors) - darker for lower HR
                 position = bin_center / z0_threshold if z0_threshold > 0 else 0
-                hue = 270  # Purple hue
+                hue = 270  # Violet hue
                 sat = 0.7
                 val = 0.3 + 0.2 * position  # 0.3 (darkest) to 0.5 (lighter)
-            else:
-                # Z0 and above: Rainbow gradient (purple to red)
-                position = (bin_center - z0_threshold) / (max_hr - z0_threshold) if max_hr > z0_threshold else 0
-                hue = 270 * (1 - position)  # 270° (purple) to 0° (red)
+            elif bin_center < z2_end:
+                # Z0 to Z2: Violet (270°) to Green (120°)
+                position = (bin_center - z0_threshold) / (z2_end - z0_threshold) if z2_end > z0_threshold else 0
+                hue = 270 - (270 - 120) * position  # 270° → 120° (violet to green)
                 sat = 0.8
                 val = 0.9
+            else:
+                # Z2 to Max: Green (120°) to Dark Red (0°)
+                position = (bin_center - z2_end) / (max_hr - z2_end) if max_hr > z2_end else 0
+                hue = 120 * (1 - position)  # 120° → 0° (green to red)
+                sat = 0.8
+                val = 0.9 - 0.3 * position  # Darker towards red (0.9 → 0.6)
             
             # Convert HSV to RGB
             rgb = tuple(int(x * 255) for x in colorsys.hsv_to_rgb(hue/360, sat, val))
