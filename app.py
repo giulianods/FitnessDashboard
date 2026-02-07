@@ -358,7 +358,35 @@ def get_heart_rate_data():
         return jsonify({'error': str(e)}), 500
 
 
-def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR):
+def calculate_moving_average(values, window_size):
+    """
+    Calculate moving average for a list of values
+    
+    Args:
+        values: List of numeric values (may contain None)
+        window_size: Size of the moving average window
+    
+    Returns:
+        List of moving average values (same length as input)
+    """
+    if not values or window_size <= 0:
+        return values
+    
+    result = []
+    for i in range(len(values)):
+        # Get window of values, handling None values
+        window_start = max(0, i - window_size + 1)
+        window = [v for v in values[window_start:i+1] if v is not None]
+        
+        if window:
+            result.append(sum(window) / len(window))
+        else:
+            result.append(None)
+    
+    return result
+
+
+def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days=None):
     """
     Create chart JSON for historical trends with 4 subplots:
     - Chart A: Daily min/max heart rate over time
@@ -369,6 +397,7 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR):
     Args:
         weeks_data: Dictionary with dates as keys and dict with 'hr_data' and 'hrv' as values
         max_hr: Maximum heart rate for calculating cardio zones
+        display_days: Number of days in the displayed period (for calculating moving average window)
     
     Returns:
         JSON string for Plotly chart and zone times
@@ -451,6 +480,17 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR):
         else:
             total_zone_times[zone] = 0
     
+    # Calculate moving average window size (1/4 of display period)
+    if display_days:
+        ma_window = max(1, display_days // 4)
+    else:
+        # Default based on number of dates
+        ma_window = max(1, len(dates) // 4)
+    
+    # Calculate moving averages for Min HR and HRV
+    daily_mins_ma = calculate_moving_average(daily_mins, ma_window)
+    hrv_values_ma = calculate_moving_average(daily_hrvs, ma_window)
+    
     # Create subplots - 2x2 grid
     fig = make_subplots(
         rows=2, cols=2,
@@ -489,6 +529,16 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR):
         showlegend=False
     ), row=1, col=1)
     
+    # Add moving average for Min HR
+    fig.add_trace(go.Scatter(
+        x=dates,
+        y=daily_mins_ma,
+        mode='lines',
+        name=f'Min HR MA ({ma_window}d)',
+        line=dict(color='#1E3A8A', width=3, dash='solid'),
+        showlegend=False
+    ), row=1, col=1)
+    
     # Chart B: Time in each zone (horizontal bar chart)
     zone_names = list(garmin_zones.keys())
     zone_time_values = [total_zone_times[z] for z in zone_names]
@@ -521,6 +571,22 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR):
             marker=dict(size=6),
             showlegend=False
         ), row=2, col=1)
+        
+        # Add moving average for HRV
+        # Calculate MA using all dates (including None values) to maintain proper alignment
+        hrv_ma_filtered = [(date, ma) for date, ma in zip(dates, hrv_values_ma) if ma is not None]
+        if hrv_ma_filtered:
+            hrv_ma_dates = [d for d, _ in hrv_ma_filtered]
+            hrv_ma_vals = [v for _, v in hrv_ma_filtered]
+            
+            fig.add_trace(go.Scatter(
+                x=hrv_ma_dates,
+                y=hrv_ma_vals,
+                mode='lines',
+                name=f'HRV MA ({ma_window}d)',
+                line=dict(color='#6A1B9A', width=3, dash='solid'),
+                showlegend=False
+            ), row=2, col=1)
     
     # Chart C: Heart rate distribution with lognormal fit (positioned at row 2, col 2)
     if all_waking_hrs:
@@ -623,13 +689,22 @@ def get_historical_data():
         # Get Garmin client
         client = get_garmin_client()
         
+        # Calculate display period and moving average window
+        display_days = weeks * 7
+        ma_window = max(1, display_days // 4)
+        
         # Fetch data for the last N weeks (excluding today)
-        weeks_data = {}
-        all_heart_rates = []
+        # Also fetch extra data for moving average calculation
         end_date = datetime.now() - timedelta(days=1)  # Exclude today
         start_date = end_date - timedelta(weeks=weeks)
         
-        current_date = start_date
+        # Fetch additional data before start_date for moving average
+        prefetch_start_date = start_date - timedelta(days=ma_window - 1)
+        
+        weeks_data = {}
+        all_heart_rates = []
+        
+        current_date = prefetch_start_date
         while current_date <= end_date:
             date_str = current_date.strftime('%Y-%m-%d')
             try:
@@ -641,7 +716,9 @@ def get_historical_data():
                         'hr_data': hr_data,
                         'hrv': hrv_data
                     }
-                    all_heart_rates.extend([point['heart_rate'] for point in hr_data])
+                    # Only include in stats if within display period
+                    if current_date >= start_date:
+                        all_heart_rates.extend([point['heart_rate'] for point in hr_data])
             except Exception as e:
                 print(f"Warning: Could not fetch data for {date_str}: {e}")
             
@@ -653,23 +730,32 @@ def get_historical_data():
                 'message': 'No activity was recorded in this period or data has not synced yet'
             }), 404
         
-        # Create historical chart JSON
-        chart_json, zone_times = create_historical_chart_json(weeks_data)
+        # Create historical chart JSON with display_days parameter
+        chart_json, zone_times = create_historical_chart_json(weeks_data, display_days=display_days)
         
-        # Calculate statistics for the entire period
-        stats = {
-            'average': round(sum(all_heart_rates) / len(all_heart_rates)),
-            'maximum': max(all_heart_rates),
-            'minimum': min(all_heart_rates),
-            'time_z2': format_time(zone_times['Z2']),
-            'time_z4_z5': format_time(zone_times['Z4'] + zone_times['Z5'])
-        }
+        # Calculate statistics for the entire period (only display period, not prefetch)
+        if all_heart_rates:
+            stats = {
+                'average': round(sum(all_heart_rates) / len(all_heart_rates)),
+                'maximum': max(all_heart_rates),
+                'minimum': min(all_heart_rates),
+                'time_z2': format_time(zone_times['Z2']),
+                'time_z4_z5': format_time(zone_times['Z4'] + zone_times['Z5'])
+            }
+        else:
+            stats = {
+                'average': 0,
+                'maximum': 0,
+                'minimum': 0,
+                'time_z2': '0m',
+                'time_z4_z5': '0m'
+            }
         
         return jsonify({
             'chart': chart_json,
             'stats': stats,
             'weeks': weeks,
-            'days_with_data': len(weeks_data)
+            'days_with_data': len([d for d in weeks_data if d >= start_date.strftime('%Y-%m-%d')])
         })
         
     except ValueError:
@@ -709,11 +795,18 @@ def get_monthly_data():
         else:
             end_date = datetime(year, month + 1, 1) - timedelta(days=1)
         
-        # Fetch data for all days in the month
+        # Calculate display period and moving average window
+        display_days = (end_date - start_date).days + 1
+        ma_window = max(1, display_days // 4)
+        
+        # Fetch additional data before start_date for moving average
+        prefetch_start_date = start_date - timedelta(days=ma_window - 1)
+        
+        # Fetch data for all days in the month (plus prefetch period)
         month_data = {}
         all_heart_rates = []
         
-        current_date = start_date
+        current_date = prefetch_start_date
         while current_date <= end_date:
             date_str = current_date.strftime('%Y-%m-%d')
             try:
@@ -725,7 +818,9 @@ def get_monthly_data():
                         'hr_data': hr_data,
                         'hrv': hrv_data
                     }
-                    all_heart_rates.extend([point['heart_rate'] for point in hr_data])
+                    # Only include in stats if within display period
+                    if current_date >= start_date:
+                        all_heart_rates.extend([point['heart_rate'] for point in hr_data])
             except Exception as e:
                 print(f"Warning: Could not fetch data for {date_str}: {e}")
             
@@ -739,24 +834,33 @@ def get_monthly_data():
                 'message': 'No activity was recorded in this month or data has not synced yet'
             }), 404
         
-        # Create historical chart JSON (reuse the same function)
-        chart_json, zone_times = create_historical_chart_json(month_data)
+        # Create historical chart JSON (reuse the same function) with display_days parameter
+        chart_json, zone_times = create_historical_chart_json(month_data, display_days=display_days)
         
-        # Calculate statistics for the entire month
-        stats = {
-            'average': round(sum(all_heart_rates) / len(all_heart_rates)),
-            'maximum': max(all_heart_rates),
-            'minimum': min(all_heart_rates),
-            'time_z2': format_time(zone_times['Z2']),
-            'time_z4_z5': format_time(zone_times['Z4'] + zone_times['Z5'])
-        }
+        # Calculate statistics for the entire month (only display period, not prefetch)
+        if all_heart_rates:
+            stats = {
+                'average': round(sum(all_heart_rates) / len(all_heart_rates)),
+                'maximum': max(all_heart_rates),
+                'minimum': min(all_heart_rates),
+                'time_z2': format_time(zone_times['Z2']),
+                'time_z4_z5': format_time(zone_times['Z4'] + zone_times['Z5'])
+            }
+        else:
+            stats = {
+                'average': 0,
+                'maximum': 0,
+                'minimum': 0,
+                'time_z2': '0m',
+                'time_z4_z5': '0m'
+            }
         
         return jsonify({
             'chart': chart_json,
             'stats': stats,
             'year': year,
             'month': month,
-            'days_with_data': len(month_data)
+            'days_with_data': len([d for d in month_data if d >= start_date.strftime('%Y-%m-%d')])
         })
         
     except ValueError:
