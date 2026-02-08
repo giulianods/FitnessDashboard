@@ -355,9 +355,9 @@ class CacheManager:
             conn.commit()
         
         if hr_deleted > 0 or hrv_deleted > 0:
-            logger.info(f"Cleaned up {hr_deleted} HR entries and {hrv_deleted} HRV entries from database")
+            logger.debug(f"Cleaned up {hr_deleted} HR entries and {hrv_deleted} HRV entries from database")
         if len(expired_hr_keys) > 0 or len(expired_hrv_keys) > 0:
-            logger.info(f"Cleaned up {len(expired_hr_keys)} HR entries and {len(expired_hrv_keys)} HRV entries from memory")
+            logger.debug(f"Cleaned up {len(expired_hr_keys)} HR entries and {len(expired_hrv_keys)} HRV entries from memory")
         
         return {
             'hr_deleted': hr_deleted, 
@@ -410,7 +410,7 @@ class CacheManager:
             
             conn.commit()
         
-        logger.info("Cleared all cached data from database and memory")
+        logger.debug("Cleared all cached data from database and memory")
     
     def clear_memory_cache(self) -> None:
         """Clear only the in-memory cache (database cache remains)"""
@@ -420,7 +420,7 @@ class CacheManager:
         self._memory_cache['hr'].clear()
         self._memory_cache['hrv'].clear()
         
-        logger.info(f"Cleared memory cache: {hr_count} HR entries, {hrv_count} HRV entries")
+        logger.debug(f"Cleared memory cache: {hr_count} HR entries, {hrv_count} HRV entries")
     
     def get_memory_cache_stats(self) -> Dict[str, int]:
         """

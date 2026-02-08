@@ -5,9 +5,12 @@ Retrieves yesterday's heart rate data from Garmin and creates a visualization
 """
 import sys
 import argparse
+import logging
 from datetime import datetime, timedelta
 from garmin_client import GarminClient
 from visualizer import create_heart_rate_chart
+
+logger = logging.getLogger(__name__)
 
 
 def main():
@@ -34,15 +37,15 @@ def main():
     
     try:
         # Initialize Garmin client
-        print("Initializing Garmin client...")
+        logger.debug("Initializing Garmin client...")
         client = GarminClient()
         
         # Load credentials
-        print(f"Loading credentials from {args.config}...")
+        logger.debug(f"Loading credentials from {args.config}...")
         client.load_credentials(args.config)
         
         # Login to Garmin Connect
-        print("Logging in to Garmin Connect...")
+        logger.debug("Logging in to Garmin Connect...")
         client.login()
         
         # Get heart rate data
@@ -50,41 +53,41 @@ def main():
             # Parse specific date
             try:
                 target_date = datetime.strptime(args.date, '%Y-%m-%d')
-                print(f"Retrieving heart rate data for {args.date}...")
+                logger.debug(f"Retrieving heart rate data for {args.date}...")
                 data = client.get_heart_rate_data(target_date)
             except ValueError:
-                print(f"Error: Invalid date format. Please use YYYY-MM-DD")
+                logger.debug(f"Error: Invalid date format. Please use YYYY-MM-DD")
                 sys.exit(1)
         else:
             # Get yesterday's data
-            print("Retrieving yesterday's heart rate data...")
+            logger.debug("Retrieving yesterday's heart rate data...")
             data = client.get_yesterday_heart_rate()
         
         # Check if data was retrieved
         if not data:
-            print("No heart rate data found for the specified date.")
-            print("This could mean:")
-            print("  - No activity was recorded on that date")
-            print("  - Your Garmin device was not worn")
-            print("  - The data has not synced yet")
+            logger.debug("No heart rate data found for the specified date.")
+            logger.debug("This could mean:")
+            logger.debug("  - No activity was recorded on that date")
+            logger.debug("  - Your Garmin device was not worn")
+            logger.debug("  - The data has not synced yet")
             sys.exit(1)
         
         # Create visualization
-        print(f"\nCreating heart rate visualization...")
+        logger.debug(f"\nCreating heart rate visualization...")
         create_heart_rate_chart(data, args.output)
         
-        print(f"\n✓ Success! Heart rate chart has been created.")
-        print(f"  Open {args.output} in your browser to view the chart.")
+        logger.debug(f"\n✓ Success! Heart rate chart has been created.")
+        logger.debug(f"  Open {args.output} in your browser to view the chart.")
         
     except FileNotFoundError as e:
-        print(f"Error: {e}")
-        print("\nTo get started:")
-        print("  1. Copy config.json.example to config.json")
-        print("  2. Edit config.json with your Garmin credentials")
-        print("  3. Run this script again")
+        logger.debug(f"Error: {e}")
+        logger.debug("\nTo get started:")
+        logger.debug("  1. Copy config.json.example to config.json")
+        logger.debug("  2. Edit config.json with your Garmin credentials")
+        logger.debug("  3. Run this script again")
         sys.exit(1)
     except Exception as e:
-        print(f"Error: {e}")
+        logger.debug(f"Error: {e}")
         sys.exit(1)
 
 

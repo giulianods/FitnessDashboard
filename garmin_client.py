@@ -4,10 +4,13 @@ Handles authentication and data retrieval from Garmin Connect
 """
 import json
 import os
+import logging
 from datetime import datetime, timedelta
 from garminconnect import Garmin
 from typing import Optional, Dict, List
 from cache_manager import CacheManager
+
+logger = logging.getLogger(__name__)
 
 
 class GarminClient:
@@ -54,7 +57,7 @@ class GarminClient:
         try:
             self.client = Garmin(self.email, self.password)
             self.client.login()
-            print("Successfully logged in to Garmin Connect")
+            logger.debug("Successfully logged in to Garmin Connect")
         except Exception as e:
             raise Exception(f"Failed to login to Garmin Connect: {e}")
     
@@ -83,7 +86,7 @@ class GarminClient:
         """
         # Skip future dates entirely - they never have data
         if self._is_future_date(date):
-            print(f"Skipping future date: {date.strftime('%Y-%m-%d')}")
+            logger.debug(f"Skipping future date: {date.strftime('%Y-%m-%d')}")
             return None
         
         # Check cache first
@@ -98,13 +101,13 @@ class GarminClient:
         
         try:
             date_str = date.strftime('%Y-%m-%d')
-            print(f"Fetching heart rate data from Garmin API for {date_str}...")
+            logger.debug(f"Fetching heart rate data from Garmin API for {date_str}...")
             
             # Get heart rate data for the specified date
             hr_data = self.client.get_heart_rates(date_str)
             
             if not hr_data:
-                print(f"No heart rate data found for {date_str}")
+                logger.debug(f"No heart rate data found for {date_str}")
                 # Cache None for past dates (not future dates which are already filtered)
                 if self.use_cache and self.cache:
                     self.cache.set_heart_rate_data(date, None)
@@ -114,7 +117,7 @@ class GarminClient:
             heart_rate_values = hr_data.get('heartRateValues', [])
             
             if not heart_rate_values:
-                print(f"No heart rate values found for {date_str}")
+                logger.debug(f"No heart rate values found for {date_str}")
                 # Cache None for past dates
                 if self.use_cache and self.cache:
                     self.cache.set_heart_rate_data(date, None)
@@ -131,7 +134,7 @@ class GarminClient:
                         'heart_rate': value
                     })
             
-            print(f"Retrieved {len(parsed_data)} heart rate data points from API")
+            logger.debug(f"Retrieved {len(parsed_data)} heart rate data points from API")
             
             # Cache the data
             if self.use_cache and self.cache:
@@ -168,7 +171,7 @@ class GarminClient:
         """
         # Skip future dates entirely - they never have data
         if self._is_future_date(date):
-            print(f"Skipping future date for HRV: {date.strftime('%Y-%m-%d')}")
+            logger.debug(f"Skipping future date for HRV: {date.strftime('%Y-%m-%d')}")
             return None
         
         # Check cache first
@@ -182,7 +185,7 @@ class GarminClient:
             raise Exception("Not logged in. Call login() first")
         
         date_str = date.strftime('%Y-%m-%d')
-        print(f"Fetching HRV data from Garmin API for {date_str}...")
+        logger.debug(f"Fetching HRV data from Garmin API for {date_str}...")
         
         hrv_value = None
         try:
@@ -194,14 +197,14 @@ class GarminClient:
                 hrv_value = sleep_data.get('avgOvernightHrv')
                 
                 if hrv_value is not None:
-                    print(f"Retrieved HRV value from API: {hrv_value} ms")
+                    logger.debug(f"Retrieved HRV value from API: {hrv_value} ms")
                 else:
-                    print(f"No avgOvernightHrv found in sleep data for {date_str}")
+                    logger.debug(f"No avgOvernightHrv found in sleep data for {date_str}")
             else:
-                print(f"No sleep data found for {date_str}")
+                logger.debug(f"No sleep data found for {date_str}")
                 
         except Exception as e:
-            print(f"Failed to get HRV data for {date_str}: {e}")
+            logger.debug(f"Failed to get HRV data for {date_str}: {e}")
         
         # Cache the result (even if None) to avoid repeated API calls
         if self.use_cache and self.cache:
