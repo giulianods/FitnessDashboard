@@ -1273,7 +1273,9 @@ def get_zone_training_data():
                 y=daily_z2,
                 marker_color='green',
                 name='Z2',
-                showlegend=False
+                showlegend=False,
+                customdata=[format_time(v) for v in daily_z2],
+                hovertemplate='<b>%{x}</b><br>Time: %{customdata}<extra></extra>'
             ),
             row=1, col=1
         )
@@ -1285,7 +1287,9 @@ def get_zone_training_data():
                 y=daily_z4_z5,
                 marker_color='red',
                 name='Z4+Z5',
-                showlegend=False
+                showlegend=False,
+                customdata=[format_time(v) for v in daily_z4_z5],
+                hovertemplate='<b>%{x}</b><br>Time: %{customdata}<extra></extra>'
             ),
             row=1, col=2
         )
@@ -1297,7 +1301,9 @@ def get_zone_training_data():
                 y=weekly_z2_values,
                 marker_color='green',
                 name='Z2',
-                showlegend=False
+                showlegend=False,
+                customdata=[format_time(v) for v in weekly_z2_values],
+                hovertemplate='<b>%{x}</b><br>Time: %{customdata}<extra></extra>'
             ),
             row=2, col=1
         )
@@ -1309,7 +1315,9 @@ def get_zone_training_data():
                 y=weekly_z4_z5_values,
                 marker_color='red',
                 name='Z4+Z5',
-                showlegend=False
+                showlegend=False,
+                customdata=[format_time(v) for v in weekly_z4_z5_values],
+                hovertemplate='<b>%{x}</b><br>Time: %{customdata}<extra></extra>'
             ),
             row=2, col=2
         )
