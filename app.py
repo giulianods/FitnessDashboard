@@ -1316,10 +1316,24 @@ def get_zone_training_data():
         fig.update_xaxes(title_text="Week", row=2, col=1, tickangle=-45)
         fig.update_xaxes(title_text="Week", row=2, col=2, tickangle=-45)
         
-        fig.update_yaxes(title_text="Minutes", row=1, col=1)
-        fig.update_yaxes(title_text="Minutes", row=1, col=2)
-        fig.update_yaxes(title_text="Minutes", row=2, col=1)
-        fig.update_yaxes(title_text="Minutes", row=2, col=2)
+        # Calculate max values for appropriate tick spacing
+        max_daily = max(max(daily_z2) if daily_z2 else [0], max(daily_z4_z5) if daily_z4_z5 else [0])
+        max_weekly = max(max(weekly_z2_values) if weekly_z2_values else [0], 
+                         max(weekly_z4_z5_values) if weekly_z4_z5_values else [0])
+        
+        # Generate tick values and formatted labels for daily charts (every 30 min)
+        daily_tick_vals = list(range(0, int(max_daily) + 60, 30))
+        daily_tick_text = [format_time(v) for v in daily_tick_vals]
+        
+        # Generate tick values and formatted labels for weekly charts (every 60 min)
+        weekly_tick_vals = list(range(0, int(max_weekly) + 120, 60))
+        weekly_tick_text = [format_time(v) for v in weekly_tick_vals]
+        
+        # Update Y-axes with formatted time labels
+        fig.update_yaxes(title_text="Time", tickvals=daily_tick_vals, ticktext=daily_tick_text, row=1, col=1)
+        fig.update_yaxes(title_text="Time", tickvals=daily_tick_vals, ticktext=daily_tick_text, row=1, col=2)
+        fig.update_yaxes(title_text="Time", tickvals=weekly_tick_vals, ticktext=weekly_tick_text, row=2, col=1)
+        fig.update_yaxes(title_text="Time", tickvals=weekly_tick_vals, ticktext=weekly_tick_text, row=2, col=2)
         
         # Update layout
         fig.update_layout(
