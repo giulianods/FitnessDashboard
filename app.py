@@ -13,6 +13,10 @@ import json
 import numpy as np
 from scipy import stats
 import colorsys
+import logging
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
@@ -865,7 +869,7 @@ def get_historical_data():
                 if hr_data and current_date >= start_date:
                     all_heart_rates.extend([point['heart_rate'] for point in hr_data])
             except Exception as e:
-                print(f"Warning: Could not fetch data for {date_str}: {e}")
+                logger.debug(f"Could not fetch data for {date_str}: {e}")
             
             current_date += timedelta(days=1)
         
@@ -980,7 +984,7 @@ def get_monthly_data():
                 if hr_data and current_date >= start_date:
                     all_heart_rates.extend([point['heart_rate'] for point in hr_data])
             except Exception as e:
-                print(f"Warning: Could not fetch data for {date_str}: {e}")
+                logger.debug(f"Could not fetch data for {date_str}: {e}")
             
             current_date += timedelta(days=1)
         
