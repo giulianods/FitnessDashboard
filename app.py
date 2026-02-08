@@ -1142,7 +1142,24 @@ def get_zone_training_data():
         end_date = datetime.now().date()
         start_date = end_date - timedelta(days=364)
         
-        weeks_data = client.get_weeks_data(start_date, end_date)
+        # Fetch data day by day (GarminClient doesn't have get_weeks_data method)
+        weeks_data = {}
+        current_date = datetime.combine(start_date, datetime.min.time())
+        end_datetime = datetime.combine(end_date, datetime.min.time())
+        
+        while current_date <= end_datetime:
+            date_str = current_date.strftime('%Y-%m-%d')
+            hr_data = client.get_heart_rate_data(current_date)
+            hrv_data = client.get_hrv_data(current_date)
+            
+            # Only include days with actual data
+            if hr_data or hrv_data:
+                weeks_data[date_str] = {
+                    'hr_data': hr_data if hr_data else [],
+                    'hrv': hrv_data
+                }
+            
+            current_date += timedelta(days=1)
         
         if not weeks_data:
             return jsonify({
