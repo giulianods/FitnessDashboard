@@ -5,9 +5,15 @@ Provides local filesystem caching using SQLite to improve performance
 import sqlite3
 import json
 import os
+import logging
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict
 from pathlib import Path
+
+# Configure logger for cache operations
+# By default, only WARNING and above will be logged (cache operations won't show)
+# To enable cache debug logs, set: logging.getLogger('cache_manager').setLevel(logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 
 class CacheManager:
@@ -105,11 +111,11 @@ class CacheManager:
         if date_str in self._memory_cache['hr']:
             data, cached_at = self._memory_cache['hr'][date_str]
             if self._is_cache_valid(cached_at):
-                print(f"Memory cache HIT for HR data {date_str}")
+                logger.debug(f"Memory cache HIT for HR data {date_str}")
                 return data
             else:
                 # Expired in memory, remove it
-                print(f"Memory cache EXPIRED for HR data {date_str}")
+                logger.debug(f"Memory cache EXPIRED for HR data {date_str}")
                 del self._memory_cache['hr'][date_str]
         
         # TIER 2: Check database cache (persistent)
@@ -128,11 +134,11 @@ class CacheManager:
             
             # Check if cache is still valid
             if self._is_cache_valid(cached_at):
-                print(f"Database cache HIT for HR data {date_str} (cached at {cached_at})")
+                logger.debug(f"Database cache HIT for HR data {date_str} (cached at {cached_at})")
                 
                 # Check if this is a cached None value
                 if data_json == '"NO_DATA"':
-                    print(f"Cached None value for {date_str} (no data available)")
+                    logger.debug(f"Cached None value for {date_str} (no data available)")
                     # Store None in memory cache
                     self._memory_cache['hr'][date_str] = (None, cached_at)
                     return None
@@ -147,11 +153,11 @@ class CacheManager:
                 self._memory_cache['hr'][date_str] = (data, cached_at)
                 return data
             else:
-                print(f"Database cache EXPIRED for HR data {date_str}")
+                logger.debug(f"Database cache EXPIRED for HR data {date_str}")
                 # Clean up expired cache
                 self._delete_heart_rate_data(date)
         
-        print(f"Cache MISS for HR data {date_str}")
+        logger.debug(f"Cache MISS for HR data {date_str}")
         return None
     
     def set_heart_rate_data(self, date: datetime, data: Optional[List[Dict]]) -> None:
@@ -168,7 +174,7 @@ class CacheManager:
         # Handle None values (no data available for this date)
         if data is None:
             data_json = json.dumps("NO_DATA")
-            print(f"Caching None value for {date_str} (no data available)")
+            logger.debug(f"Caching None value for {date_str} (no data available)")
             # Store None in memory cache
             self._memory_cache['hr'][date_str] = (None, cached_at)
         else:
@@ -182,7 +188,7 @@ class CacheManager:
                 serializable_data.append(serializable_point)
             
             data_json = json.dumps(serializable_data)
-            print(f"Cached HR data for {date_str} ({len(data)} points)")
+            logger.debug(f"Cached HR data for {date_str} ({len(data)} points)")
             # Store in memory cache
             self._memory_cache['hr'][date_str] = (data, cached_at)
         
@@ -214,11 +220,11 @@ class CacheManager:
         if date_str in self._memory_cache['hrv']:
             value, cached_at = self._memory_cache['hrv'][date_str]
             if self._is_cache_valid(cached_at):
-                print(f"Memory cache HIT for HRV data {date_str}")
+                logger.debug(f"Memory cache HIT for HRV data {date_str}")
                 return value
             else:
                 # Expired in memory, remove it
-                print(f"Memory cache EXPIRED for HRV data {date_str}")
+                logger.debug(f"Memory cache EXPIRED for HRV data {date_str}")
                 del self._memory_cache['hrv'][date_str]
         
         # TIER 2: Check database cache (persistent)
@@ -237,16 +243,16 @@ class CacheManager:
             
             # Check if cache is still valid
             if self._is_cache_valid(cached_at):
-                print(f"Database cache HIT for HRV data {date_str} (cached at {cached_at})")
+                logger.debug(f"Database cache HIT for HRV data {date_str} (cached at {cached_at})")
                 # Store in memory cache for next time
                 self._memory_cache['hrv'][date_str] = (value, cached_at)
                 return value
             else:
-                print(f"Database cache EXPIRED for HRV data {date_str}")
+                logger.debug(f"Database cache EXPIRED for HRV data {date_str}")
                 # Clean up expired cache
                 self._delete_hrv_data(date)
         
-        print(f"Cache MISS for HRV data {date_str}")
+        logger.debug(f"Cache MISS for HRV data {date_str}")
         return None
     
     def set_hrv_data(self, date: datetime, value: Optional[float]) -> None:
@@ -273,7 +279,7 @@ class CacheManager:
         
         # Store in memory cache
         self._memory_cache['hrv'][date_str] = (value, cached_at)
-        print(f"Cached HRV data for {date_str} (value: {value})")
+        logger.debug(f"Cached HRV data for {date_str} (value: {value})")
     
     def _delete_heart_rate_data(self, date: datetime) -> None:
         """Delete heart rate data for a specific date from both database and memory"""
@@ -349,9 +355,9 @@ class CacheManager:
             conn.commit()
         
         if hr_deleted > 0 or hrv_deleted > 0:
-            print(f"Cleaned up {hr_deleted} HR entries and {hrv_deleted} HRV entries from database")
+            logger.info(f"Cleaned up {hr_deleted} HR entries and {hrv_deleted} HRV entries from database")
         if len(expired_hr_keys) > 0 or len(expired_hrv_keys) > 0:
-            print(f"Cleaned up {len(expired_hr_keys)} HR entries and {len(expired_hrv_keys)} HRV entries from memory")
+            logger.info(f"Cleaned up {len(expired_hr_keys)} HR entries and {len(expired_hrv_keys)} HRV entries from memory")
         
         return {
             'hr_deleted': hr_deleted, 
@@ -404,7 +410,7 @@ class CacheManager:
             
             conn.commit()
         
-        print("Cleared all cached data from database and memory")
+        logger.info("Cleared all cached data from database and memory")
     
     def clear_memory_cache(self) -> None:
         """Clear only the in-memory cache (database cache remains)"""
@@ -414,7 +420,7 @@ class CacheManager:
         self._memory_cache['hr'].clear()
         self._memory_cache['hrv'].clear()
         
-        print(f"Cleared memory cache: {hr_count} HR entries, {hrv_count} HRV entries")
+        logger.info(f"Cleared memory cache: {hr_count} HR entries, {hrv_count} HRV entries")
     
     def get_memory_cache_stats(self) -> Dict[str, int]:
         """

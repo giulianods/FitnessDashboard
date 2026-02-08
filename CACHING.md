@@ -462,8 +462,81 @@ The cache system fails gracefully:
 - Missing cache = automatic API fetch
 - Corrupted cache entries are skipped
 
+## Logging Configuration
+
+### Default Behavior (Silent)
+
+By default, cache operations are **silent** (logging level = WARNING). This provides the best performance as no log messages are generated during normal operation.
+
+### Enabling Cache Debug Logs
+
+If you need to debug caching behavior or see cache hit/miss statistics, you can enable debug logging:
+
+```python
+import logging
+
+# Enable debug logging for cache operations
+logging.getLogger('cache_manager').setLevel(logging.DEBUG)
+
+# Optionally configure log format
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+```
+
+### Logging Levels
+
+The cache manager uses different logging levels for different operations:
+
+| Level | What's Logged | When to Use |
+|-------|--------------|-------------|
+| **DEBUG** | All cache operations (hits, misses, stores, expirations) | Debugging cache behavior, troubleshooting |
+| **INFO** | Important operations (cleanup, cache clear) | Monitoring cache maintenance |
+| **WARNING** | Errors and warnings only (default) | Production use (best performance) |
+
+### Example Debug Output
+
+When DEBUG logging is enabled, you'll see messages like:
+
+```
+2026-02-08 16:12:43 - cache_manager - DEBUG - Memory cache HIT for HR data 2026-02-07
+2026-02-08 16:12:43 - cache_manager - DEBUG - Database cache HIT for HR data 2026-02-06
+2026-02-08 16:12:43 - cache_manager - DEBUG - Cache MISS for HR data 2026-02-05
+2026-02-08 16:12:43 - cache_manager - DEBUG - Cached HR data for 2026-02-05 (1440 points)
+2026-02-08 16:12:44 - cache_manager - INFO - Cleaned up 5 HR entries and 3 HRV entries from database
+```
+
+### Performance Impact
+
+- **Logging disabled (WARNING)**: No performance impact - messages aren't generated
+- **Logging enabled (DEBUG)**: Minimal impact - Python's logging is optimized and much faster than print()
+
+The logging framework is significantly faster than print statements because:
+- Messages are only formatted if the log level allows them
+- No forced flush to stdout on every call
+- Can be completely disabled with zero overhead
+
+### Environment Variable Configuration (Optional)
+
+You can control logging via environment variable:
+
+```bash
+# Enable debug logging
+export LOG_LEVEL=DEBUG
+python app.py
+
+# Or in your app startup:
+import os
+import logging
+log_level = os.getenv('LOG_LEVEL', 'WARNING')
+logging.getLogger('cache_manager').setLevel(getattr(logging, log_level))
+```
+
 ## Summary
 
 The caching system provides a significant performance improvement with minimal complexity. It's enabled by default, requires no configuration, and works transparently in the background.
+
+Cache operations are **silent by default** for optimal performance. Enable debug logging only when you need to troubleshoot or monitor cache behavior.
 
 For most users, the cache "just works" - data loads instantly after the first fetch, and expired data is automatically refreshed when needed.
