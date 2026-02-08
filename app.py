@@ -1130,6 +1130,191 @@ def get_weekly_data():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/get_zone_training_data')
+def get_zone_training_data():
+    """API endpoint to get zone training data for last 364 days (52 weeks)"""
+    try:
+        client = get_garmin_client()
+        
+        # Fetch last 364 days (52 weeks)
+        end_date = datetime.now().date()
+        start_date = end_date - timedelta(days=364)
+        
+        weeks_data = client.get_weeks_data(start_date, end_date)
+        
+        if not weeks_data:
+            return jsonify({
+                'error': 'No heart rate data found for the last 52 weeks',
+                'message': 'No activity was recorded in this period or data has not synced yet'
+            }), 404
+        
+        # Calculate daily zone times
+        max_hr = DEFAULT_MAX_HR
+        garmin_zones = {
+            'Z0': (0, max_hr * 0.50, 'Rest'),
+            'Z1': (max_hr * 0.50, max_hr * 0.60, 'Very Light'),
+            'Z2': (max_hr * 0.60, max_hr * 0.70, 'Light'),
+            'Z3': (max_hr * 0.70, max_hr * 0.80, 'Moderate'),
+            'Z4': (max_hr * 0.80, max_hr * 0.90, 'Hard'),
+            'Z5': (max_hr * 0.90, max_hr * 1.00, 'Maximum'),
+        }
+        
+        # Calculate zone times per day
+        daily_zone_times = {}
+        for date_str in sorted(weeks_data.keys()):
+            entry = weeks_data[date_str]
+            
+            # Handle both old format (list) and new format (dict)
+            if isinstance(entry, dict):
+                data = entry.get('hr_data', [])
+            else:
+                data = entry
+            
+            if data:
+                # Filter waking hours data (6:00-22:00)
+                waking_hours_data = []
+                for point in data:
+                    hour = point['timestamp'].hour
+                    if 6 <= hour < 22:
+                        waking_hours_data.append(point)
+                
+                # Calculate zone distribution for this day
+                zone_counts = {zone: 0 for zone in garmin_zones.keys()}
+                for point in waking_hours_data:
+                    hr = point['heart_rate']
+                    for zone_name, (lower, upper, _) in garmin_zones.items():
+                        if lower <= hr < upper:
+                            zone_counts[zone_name] += 1
+                            break
+                
+                # Convert counts to time in minutes
+                total_points = sum(zone_counts.values())
+                zone_times = {}
+                for zone in zone_counts:
+                    if total_points > 0:
+                        time_minutes = (zone_counts[zone] / total_points) * WAKING_HOURS_DURATION
+                        zone_times[zone] = time_minutes
+                    else:
+                        zone_times[zone] = 0
+                
+                daily_zone_times[date_str] = zone_times
+        
+        # Prepare data for charts
+        # Last 28 days for daily charts
+        last_28_dates = sorted(daily_zone_times.keys())[-28:]
+        daily_z2 = [daily_zone_times[date]['Z2'] for date in last_28_dates]
+        daily_z4_z5 = [daily_zone_times[date]['Z4'] + daily_zone_times[date]['Z5'] for date in last_28_dates]
+        
+        # Aggregate by ISO calendar week for weekly charts
+        weekly_z2 = {}
+        weekly_z4_z5 = {}
+        for date_str, zone_times in daily_zone_times.items():
+            date_obj = datetime.strptime(date_str, '%Y-%m-%d').date()
+            year, week, _ = date_obj.isocalendar()
+            week_key = f"{year}-W{week:02d}"
+            
+            if week_key not in weekly_z2:
+                weekly_z2[week_key] = 0
+                weekly_z4_z5[week_key] = 0
+            
+            weekly_z2[week_key] += zone_times['Z2']
+            weekly_z4_z5[week_key] += zone_times['Z4'] + zone_times['Z5']
+        
+        # Get last 52 weeks
+        last_52_weeks = sorted(weekly_z2.keys())[-52:]
+        weekly_z2_values = [weekly_z2[week] for week in last_52_weeks]
+        weekly_z4_z5_values = [weekly_z4_z5[week] for week in last_52_weeks]
+        
+        # Create 2x2 subplot
+        fig = make_subplots(
+            rows=2, cols=2,
+            subplot_titles=('Daily Z2 Time (Last 28 Days)', 
+                          'Daily Z4+Z5 Time (Last 28 Days)',
+                          'Weekly Z2 Time (Last 52 Weeks)', 
+                          'Weekly Z4+Z5 Time (Last 52 Weeks)'),
+            vertical_spacing=0.15,
+            horizontal_spacing=0.1
+        )
+        
+        # Chart A: Daily Z2 (top-left)
+        fig.add_trace(
+            go.Bar(
+                x=last_28_dates,
+                y=daily_z2,
+                marker_color='green',
+                name='Z2',
+                showlegend=False
+            ),
+            row=1, col=1
+        )
+        
+        # Chart B: Daily Z4+Z5 (top-right)
+        fig.add_trace(
+            go.Bar(
+                x=last_28_dates,
+                y=daily_z4_z5,
+                marker_color='red',
+                name='Z4+Z5',
+                showlegend=False
+            ),
+            row=1, col=2
+        )
+        
+        # Chart C: Weekly Z2 (bottom-left)
+        fig.add_trace(
+            go.Bar(
+                x=last_52_weeks,
+                y=weekly_z2_values,
+                marker_color='green',
+                name='Z2',
+                showlegend=False
+            ),
+            row=2, col=1
+        )
+        
+        # Chart D: Weekly Z4+Z5 (bottom-right)
+        fig.add_trace(
+            go.Bar(
+                x=last_52_weeks,
+                y=weekly_z4_z5_values,
+                marker_color='red',
+                name='Z4+Z5',
+                showlegend=False
+            ),
+            row=2, col=2
+        )
+        
+        # Update axes labels
+        fig.update_xaxes(title_text="Date", row=1, col=1, tickangle=-45)
+        fig.update_xaxes(title_text="Date", row=1, col=2, tickangle=-45)
+        fig.update_xaxes(title_text="Week", row=2, col=1, tickangle=-45)
+        fig.update_xaxes(title_text="Week", row=2, col=2, tickangle=-45)
+        
+        fig.update_yaxes(title_text="Minutes", row=1, col=1)
+        fig.update_yaxes(title_text="Minutes", row=1, col=2)
+        fig.update_yaxes(title_text="Minutes", row=2, col=1)
+        fig.update_yaxes(title_text="Minutes", row=2, col=2)
+        
+        # Update layout
+        fig.update_layout(
+            height=800,
+            showlegend=False,
+            title_text="Zone Training Analysis",
+            title_x=0.5,
+            margin=dict(t=100, b=100, l=60, r=60)
+        )
+        
+        # Convert to JSON
+        chart_json = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
+        
+        return jsonify({
+            'chart': chart_json
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 if __name__ == '__main__':
     import os
     print("Starting Fitness Dashboard Web App...")

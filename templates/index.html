@@ -291,6 +291,9 @@
         <div class="menu-item" onclick="switchView('historical', event)" title="Historical Trends">
             📈
         </div>
+        <div class="menu-item" onclick="switchView('zone-training', event)" title="Zone Training">
+            🎯
+        </div>
     </div>
     
     <div class="container">
@@ -399,6 +402,18 @@
                 </div>
             </div>
         </div>
+        
+        <!-- Zone Training View -->
+        <div id="zone-training-view" class="view">
+            <div class="chart-container">
+                <div id="zone-training-chart">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <p>Loading zone training data...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
     
     <script>
@@ -445,6 +460,10 @@
                 document.getElementById('monthly-view').classList.add('active');
                 // Generate month buttons and load first month
                 generateMonthButtons();
+            } else if (view === 'zone-training') {
+                document.getElementById('zone-training-view').classList.add('active');
+                // Load zone training data
+                loadZoneTrainingData();
             }
         }
         
@@ -878,6 +897,43 @@
                 </div>
             `;
             document.getElementById('monthly-stats-container').innerHTML = statsHtml;
+        }
+        
+        // Zone Training view functions
+        function loadZoneTrainingData() {
+            const chartDiv = document.getElementById('zone-training-chart');
+            chartDiv.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading zone training data...</p></div>';
+            
+            fetch('/get_zone_training_data')
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(err => {
+                            throw new Error(err.error || 'Failed to load data');
+                        });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // Parse chart JSON string
+                    const chartData = JSON.parse(data.chart);
+                    
+                    // Clear and display the chart
+                    chartDiv.innerHTML = '';
+                    Plotly.newPlot('zone-training-chart', chartData.data, chartData.layout, {
+                        responsive: true,
+                        displayModeBar: true,
+                        displaylogo: false
+                    });
+                })
+                .catch(error => {
+                    chartDiv.innerHTML = `
+                        <div class="loading">
+                            <p style="color: #e74c3c;">Error loading zone training data</p>
+                            <p style="font-size: 14px; color: #666;">${error.message}</p>
+                        </div>
+                    `;
+                    console.error('Error:', error);
+                });
         }
     </script>
 </body>
