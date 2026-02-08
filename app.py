@@ -19,6 +19,8 @@ app = Flask(__name__)
 # Configuration
 DEFAULT_MAX_HR = 190  # Default maximum heart rate for cardio zones
 WAKING_HOURS_DURATION = 16 * 60  # Duration of waking hours in minutes (6:00-22:00)
+WAKING_HOURS_START = 6  # Start of waking hours (6:00 AM)
+WAKING_HOURS_END = 22  # End of waking hours (10:00 PM)
 
 def format_time(minutes):
     """Format time in minutes to human-readable hours and minutes string."""
@@ -80,7 +82,7 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
     waking_hours_data = []
     for point in data:
         hour = point['timestamp'].hour
-        if 6 <= hour < 22:
+        if WAKING_HOURS_START <= hour < WAKING_HOURS_END:
             waking_hours_data.append(point)
     
     waking_hours_hr = [point['heart_rate'] for point in waking_hours_data]
@@ -513,7 +515,7 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
             waking_hours_data = []
             for point in data:
                 hour = point['timestamp'].hour
-                if 6 <= hour < 22:
+                if WAKING_HOURS_START <= hour < WAKING_HOURS_END:
                     waking_hours_data.append(point)
                     all_waking_hrs.append(point['heart_rate'])
             
@@ -1103,7 +1105,7 @@ def get_weekly_data():
                     for point in hr_data:
                         all_hrs.append(point['heart_rate'])
                         hour = point['timestamp'].hour
-                        if 6 <= hour < 22:
+                        if WAKING_HOURS_START <= hour < WAKING_HOURS_END:
                             waking_hrs.append(point['heart_rate'])
         
         stats = {
@@ -1171,11 +1173,11 @@ def get_zone_training_data():
                 data = entry
             
             if data:
-                # Filter waking hours data (6:00-22:00)
+                # Filter waking hours data using configured hours
                 waking_hours_data = []
                 for point in data:
                     hour = point['timestamp'].hour
-                    if 6 <= hour < 22:
+                    if WAKING_HOURS_START <= hour < WAKING_HOURS_END:
                         waking_hours_data.append(point)
                 
                 # Calculate zone distribution for this day
@@ -1188,6 +1190,8 @@ def get_zone_training_data():
                             break
                 
                 # Convert counts to time in minutes
+                # Assumes data points are evenly spaced throughout waking hours
+                # Each point's proportion of total points represents its time share
                 total_points = sum(zone_counts.values())
                 zone_times = {}
                 for zone in zone_counts:
@@ -1200,10 +1204,11 @@ def get_zone_training_data():
                 daily_zone_times[date_str] = zone_times
         
         # Prepare data for charts
-        # Last 28 days for daily charts
+        # Last 28 days for daily charts (or fewer if less data available)
         last_28_dates = sorted(daily_zone_times.keys())[-28:]
         daily_z2 = [daily_zone_times[date]['Z2'] for date in last_28_dates]
         daily_z4_z5 = [daily_zone_times[date]['Z4'] + daily_zone_times[date]['Z5'] for date in last_28_dates]
+        num_daily_days = len(last_28_dates)
         
         # Aggregate by ISO calendar week for weekly charts
         weekly_z2 = {}
@@ -1220,18 +1225,22 @@ def get_zone_training_data():
             weekly_z2[week_key] += zone_times['Z2']
             weekly_z4_z5[week_key] += zone_times['Z4'] + zone_times['Z5']
         
-        # Get last 52 weeks
+        # Get last 52 weeks (or fewer if less data available)
         last_52_weeks = sorted(weekly_z2.keys())[-52:]
         weekly_z2_values = [weekly_z2[week] for week in last_52_weeks]
         weekly_z4_z5_values = [weekly_z4_z5[week] for week in last_52_weeks]
+        num_weekly_weeks = len(last_52_weeks)
         
-        # Create 2x2 subplot
+        # Create 2x2 subplot with dynamic titles based on actual data
+        daily_title = f'Last {num_daily_days} Days' if num_daily_days < 28 else 'Last 28 Days'
+        weekly_title = f'Last {num_weekly_weeks} Weeks' if num_weekly_weeks < 52 else 'Last 52 Weeks'
+        
         fig = make_subplots(
             rows=2, cols=2,
-            subplot_titles=('Daily Z2 Time (Last 28 Days)', 
-                          'Daily Z4+Z5 Time (Last 28 Days)',
-                          'Weekly Z2 Time (Last 52 Weeks)', 
-                          'Weekly Z4+Z5 Time (Last 52 Weeks)'),
+            subplot_titles=(f'Daily Z2 Time ({daily_title})', 
+                          f'Daily Z4+Z5 Time ({daily_title})',
+                          f'Weekly Z2 Time ({weekly_title})', 
+                          f'Weekly Z4+Z5 Time ({weekly_title})'),
             vertical_spacing=0.15,
             horizontal_spacing=0.1
         )
