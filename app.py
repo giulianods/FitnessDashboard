@@ -485,6 +485,9 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
     # Aggregate zone times
     total_zone_times = {zone: 0 for zone in garmin_zones.keys()}
     
+    # Track number of display days with data (for zone time calculation)
+    display_days_with_data = 0
+    
     for date_str in sorted(weeks_data.keys()):
         entry = weeks_data[date_str]
         
@@ -514,7 +517,11 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
         daily_hrvs.append(hrv_value)
         
         # Process waking hours data only if HR data exists
-        if data:
+        # AND only for dates in the display period (not prefetch dates)
+        if data and (not display_start_date or date_str >= display_start_date):
+            # Count this as a display day with data
+            display_days_with_data += 1
+            
             # Filter waking hours data (6:00-22:00)
             waking_hours_data = []
             for point in data:
@@ -530,14 +537,21 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
                     if lower <= hr < upper:
                         total_zone_times[zone_name] += 1
                         break
+        elif data:
+            # This is a prefetch date - still add to all_waking_hrs for histogram
+            # but don't count towards zone times
+            for point in data:
+                hour = point['timestamp'].hour
+                if WAKING_HOURS_START <= hour < WAKING_HOURS_END:
+                    all_waking_hrs.append(point['heart_rate'])
     
     # Convert zone counts to time (proportional to total waking hours)
     total_waking_points = sum(total_zone_times.values())
     for zone in total_zone_times:
-        if total_waking_points > 0:
+        if total_waking_points > 0 and display_days_with_data > 0:
             # Each day has 16 hours * 60 minutes = 960 minutes of waking hours
-            # Scale by number of days
-            time_minutes = (total_zone_times[zone] / total_waking_points) * WAKING_HOURS_DURATION * len(dates)
+            # Scale by number of display days (not including prefetch days)
+            time_minutes = (total_zone_times[zone] / total_waking_points) * WAKING_HOURS_DURATION * display_days_with_data
             total_zone_times[zone] = time_minutes
         else:
             total_zone_times[zone] = 0
