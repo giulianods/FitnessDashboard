@@ -228,6 +228,7 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
             x=bin_centers,
             y=hist_density,
             width=bin_width * 0.9,  # Slightly narrower to show separation
+            orientation='v',
             marker=dict(
                 color=bin_colors,
                 line=dict(color='white', width=1)
@@ -757,6 +758,7 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
             x=bin_centers,
             y=hist_density,
             width=bin_width * 0.9,  # Slightly narrower to show separation
+            orientation='v',
             marker=dict(
                 color=bin_colors,
                 line=dict(color='white', width=1)
