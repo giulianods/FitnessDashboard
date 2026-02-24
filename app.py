@@ -71,10 +71,11 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
     date_obj = data[0]['timestamp']
     date_str = date_obj.strftime('%A, %b %d, %Y')  # e.g., "Friday, Jan 24, 2026"
     
-    # Garmin HR Zones (Z0-Z5) based on max HR
-    # Z0 is below 50%, Z1-Z5 are the training zones
+    # Garmin HR Zones (Z-1 to Z5) based on max HR
+    # Z-1 is below 40%, Z0 is 40-50%, Z1-Z5 are the training zones
     garmin_zones = {
-        'Z0': (0, max_hr * 0.50, 'Rest'),  # Zone 0: <50%
+        'Z-1': (0, max_hr * 0.40, 'Below Rest'),  # Zone -1: <40%
+        'Z0': (max_hr * 0.40, max_hr * 0.50, 'Rest'),  # Zone 0: 40-50%
         'Z1': (max_hr * 0.50, max_hr * 0.60, 'Very Light'),  # Zone 1: 50-60%
         'Z2': (max_hr * 0.60, max_hr * 0.70, 'Light'),  # Zone 2: 60-70%
         'Z3': (max_hr * 0.70, max_hr * 0.80, 'Moderate'),  # Zone 3: 70-80%
@@ -141,10 +142,10 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
     
     # Add horizontal zone lines AFTER the trace so they appear on top
     for idx, (zone_name, (lower, upper, desc)) in enumerate(garmin_zones.items()):
-        # Skip Z0 (rest zone) from being drawn as it starts at 0
-        if zone_name == 'Z0':
+        # Skip Z-1 (below rest zone) from being drawn as it starts at 0
+        if zone_name == 'Z-1':
             continue
-        # Add horizontal line at the lower boundary of each zone (except Z0)
+        # Add horizontal line at the lower boundary of each zone (except Z-1)
         fig.add_hline(
             y=lower,
             line_dash="solid",  # Solid for better visibility
@@ -161,8 +162,8 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
     zone_names = list(garmin_zones.keys())
     zone_time_values = [zone_times[z] for z in garmin_zones.keys()]
     zone_labels = [f"{z} - {garmin_zones[z][2]}" for z in garmin_zones.keys()]
-    # Standardized zone colors: Z0=grey, Z1=light blue, Z2=green, Z3=orange, Z4=red, Z5=dark red
-    zone_colors_bar = ['#808080', '#87CEEB', '#00FF00', '#FFA500', '#FF0000', '#8B0000']
+    # Standardized zone colors: Z-1=dark grey, Z0=grey, Z1=light blue, Z2=green, Z3=orange, Z4=red, Z5=dark red
+    zone_colors_bar = ['#505050', '#808080', '#87CEEB', '#00FF00', '#FFA500', '#FF0000', '#8B0000']
     
     fig.add_trace(go.Bar(
         y=zone_labels,
@@ -466,7 +467,8 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
     
     # Garmin HR Zones
     garmin_zones = {
-        'Z0': (0, max_hr * 0.50, 'Rest'),
+        'Z-1': (0, max_hr * 0.40, 'Below Rest'),
+        'Z0': (max_hr * 0.40, max_hr * 0.50, 'Rest'),
         'Z1': (max_hr * 0.50, max_hr * 0.60, 'Very Light'),
         'Z2': (max_hr * 0.60, max_hr * 0.70, 'Light'),
         'Z3': (max_hr * 0.70, max_hr * 0.80, 'Moderate'),
@@ -645,8 +647,8 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
     zone_names = list(garmin_zones.keys())
     zone_time_values = [total_zone_times[z] for z in zone_names]
     zone_labels = [f"{z} - {garmin_zones[z][2]}" for z in zone_names]
-    # Updated zone colors: Z0=grey, Z1=light blue, Z2=green, Z3=yellow/orange, Z4=red, Z5=dark red
-    zone_colors = ['#808080', '#87CEEB', '#00FF00', '#FFA500', '#FF0000', '#8B0000']
+    # Updated zone colors: Z-1=dark grey, Z0=grey, Z1=light blue, Z2=green, Z3=yellow/orange, Z4=red, Z5=dark red
+    zone_colors = ['#505050', '#808080', '#87CEEB', '#00FF00', '#FFA500', '#FF0000', '#8B0000']
     
     fig.add_trace(go.Bar(
         y=zone_labels,
@@ -1190,7 +1192,8 @@ def get_zone_training_data():
         # Calculate daily zone times
         max_hr = DEFAULT_MAX_HR
         garmin_zones = {
-            'Z0': (0, max_hr * 0.50, 'Rest'),
+            'Z-1': (0, max_hr * 0.40, 'Below Rest'),
+            'Z0': (max_hr * 0.40, max_hr * 0.50, 'Rest'),
             'Z1': (max_hr * 0.50, max_hr * 0.60, 'Very Light'),
             'Z2': (max_hr * 0.60, max_hr * 0.70, 'Light'),
             'Z3': (max_hr * 0.70, max_hr * 0.80, 'Moderate'),
