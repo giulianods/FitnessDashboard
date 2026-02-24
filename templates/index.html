@@ -14,19 +14,54 @@
         
         body {
             font-family: 'Arial', sans-serif;
-            background: #f5f5f5;
+            background: white;
             height: 100vh;
-            padding: 10px;
+            padding: 0;
             overflow: hidden;
+            display: flex;
+        }
+        
+        /* Sidebar styles */
+        .sidebar {
+            width: 80px;
+            background: #2C3E50;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px 0;
+            flex-shrink: 0;
+        }
+        
+        .menu-item {
+            width: 50px;
+            height: 50px;
+            margin: 10px 0;
+            background: #34495E;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 24px;
+            border: 3px solid transparent;
+        }
+        
+        .menu-item:hover {
+            background: #4A90E2;
+            transform: scale(1.1);
+        }
+        
+        .menu-item.active {
+            background: #4A90E2;
+            border-color: white;
         }
         
         .container {
-            max-width: 1400px;
-            height: calc(100vh - 20px);
-            margin: 0 auto;
+            flex: 1;
+            height: 100vh;
             background: white;
-            border-radius: 15px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
             overflow: hidden;
             display: flex;
             flex-direction: column;
@@ -36,9 +71,20 @@
             display: none;
         }
         
+        .view {
+            display: none;
+            flex-direction: column;
+            height: 100%;
+            overflow: hidden;
+        }
+        
+        .view.active {
+            display: flex;
+        }
+        
         .controls {
             padding: 15px 30px;
-            background: #f8f9fa;
+            background: white;
             flex-shrink: 0;
         }
         
@@ -48,6 +94,51 @@
             justify-content: center;
             gap: 15px;
             flex-wrap: wrap;
+        }
+        
+        .period-picker-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .period-picker-container label {
+            font-size: 1.1em;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .period-picker-container button,
+        .date-picker-container button {
+            padding: 12px 30px;
+            font-size: 1em;
+            background: #4A90E2;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        
+        .period-picker-container button:hover,
+        .date-picker-container button:hover {
+            background: #357ABD;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+        
+        .period-picker-container button.active {
+            background: #2C5282;
+            border: 2px solid white;
+            box-shadow: 0 0 0 2px #2C5282;
+        }
+        
+        .period-picker-container button:active,
+        .date-picker-container button:active {
+            transform: translateY(0);
         }
         
         .date-picker-container label {
@@ -114,7 +205,7 @@
             flex-direction: column;
         }
         
-        #chart {
+        #chart, #historical-chart {
             width: 100%;
             height: 700px;
             flex-shrink: 0;
@@ -186,40 +277,150 @@
     </style>
 </head>
 <body>
+    <!-- Sidebar menu -->
+    <div class="sidebar">
+        <div class="menu-item active" onclick="switchView('daily', event)" title="Daily View">
+            ☀️
+        </div>
+        <div class="menu-item" onclick="switchView('weekly', event)" title="Weekly View">
+            📅
+        </div>
+        <div class="menu-item" onclick="switchView('monthly', event)" title="Monthly View">
+            📆
+        </div>
+        <div class="menu-item" onclick="switchView('historical', event)" title="Historical Trends">
+            📈
+        </div>
+        <div class="menu-item" onclick="switchView('zone-training', event)" title="Zone Training">
+            💪
+        </div>
+    </div>
+    
     <div class="container">
         <div class="header">
             <h1>🏃 Fitness Dashboard</h1>
             <p>Interactive Heart Rate Visualization with Cardio Zones</p>
         </div>
         
-        <div class="controls">
-            <div class="date-picker-container">
-                <label for="date-picker">Select Date:</label>
-                <input type="date" id="date-picker" value="{{ default_date }}">
-                <button onclick="loadDaysAgo(1)">Yesterday</button>
-                <button onclick="loadDaysAgo(2)">YD-1</button>
-                <button onclick="loadDaysAgo(3)">YD-2</button>
-                <button onclick="loadDaysAgo(4)">YD-3</button>
-                <button onclick="loadDaysAgo(5)">YD-4</button>
-                <button onclick="loadDaysAgo(6)">YD-5</button>
-                <button onclick="loadDaysAgo(7)">YD-6</button>
-                <button onclick="loadDaysAgo(8)">YD-7</button>
+        <!-- Daily View -->
+        <div id="daily-view" class="view active">
+            <div class="controls">
+                <div class="date-picker-container">
+                    <label for="date-picker">Select Date:</label>
+                    <input type="date" id="date-picker" value="{{ default_date }}">
+                    <button onclick="loadDaysAgo(1)">Yesterday</button>
+                    <button onclick="loadDaysAgo(2)">YD-1</button>
+                    <button onclick="loadDaysAgo(3)">YD-2</button>
+                    <button onclick="loadDaysAgo(4)">YD-3</button>
+                    <button onclick="loadDaysAgo(5)">YD-4</button>
+                    <button onclick="loadDaysAgo(6)">YD-5</button>
+                    <button onclick="loadDaysAgo(7)">YD-6</button>
+                    <button onclick="loadDaysAgo(8)">YD-7</button>
+                </div>
+            </div>
+            
+            <div id="stats-container"></div>
+            
+            <div class="chart-container">
+                <div id="chart">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <p>Select a date to view your heart rate data</p>
+                    </div>
+                </div>
             </div>
         </div>
         
-        <div id="stats-container"></div>
+        <!-- Historical Trends View -->
+        <div id="historical-view" class="view">
+            <div class="controls">
+                <div class="period-picker-container">
+                    <label>Time Period:</label>
+                    <button class="period-btn active" onclick="loadHistoricalData(4, event)">4 Weeks</button>
+                    <button class="period-btn" onclick="loadHistoricalData(8, event)">8 Weeks</button>
+                    <button class="period-btn" onclick="loadHistoricalData(12, event)">12 Weeks</button>
+                    <button class="period-btn" onclick="loadHistoricalData(16, event)">16 Weeks</button>
+                    <button class="period-btn" onclick="loadHistoricalData(24, event)">24 Weeks</button>
+                    <button class="period-btn" onclick="loadHistoricalData(48, event)">48 Weeks</button>
+                </div>
+            </div>
+            
+            <div id="historical-stats-container"></div>
+            
+            <div class="chart-container">
+                <div id="historical-chart">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <p>Loading historical trends...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
         
-        <div class="chart-container">
-            <div id="chart">
-                <div class="loading">
-                    <div class="spinner"></div>
-                    <p>Select a date to view your heart rate data</p>
+        <!-- Weekly View -->
+        <div id="weekly-view" class="view">
+            <div class="controls">
+                <div class="period-picker-container">
+                    <label>Select Week:</label>
+                    <div id="week-buttons">
+                        <!-- Week buttons will be generated dynamically -->
+                    </div>
+                </div>
+            </div>
+            
+            <div id="weekly-stats-container"></div>
+            
+            <div class="chart-container">
+                <div id="weekly-chart">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <p>Select a week to view data...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Monthly View -->
+        <div id="monthly-view" class="view">
+            <div class="controls">
+                <div class="period-picker-container">
+                    <label>Select Month:</label>
+                    <div id="month-buttons">
+                        <!-- Month buttons will be generated dynamically -->
+                    </div>
+                </div>
+            </div>
+            
+            <div id="monthly-stats-container"></div>
+            
+            <div class="chart-container">
+                <div id="monthly-chart">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <p>Select a month to view data...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Zone Training View -->
+        <div id="zone-training-view" class="view">
+            <div class="chart-container">
+                <div id="zone-training-chart">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <p>Loading zone training data...</p>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
     
     <script>
+        // Current view state
+        let currentView = 'daily';
+        let currentWeeks = 4;
+        
         // Load data on page load with default date
         window.addEventListener('DOMContentLoaded', function() {
             loadHeartRateData();
@@ -229,6 +430,42 @@
         document.getElementById('date-picker').addEventListener('change', function() {
             loadHeartRateData();
         });
+        
+        // View switching function
+        function switchView(view, event) {
+            currentView = view;
+            
+            // Update menu items
+            document.querySelectorAll('.menu-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            event.currentTarget.classList.add('active');
+            
+            // Update views
+            document.querySelectorAll('.view').forEach(v => {
+                v.classList.remove('active');
+            });
+            
+            if (view === 'daily') {
+                document.getElementById('daily-view').classList.add('active');
+            } else if (view === 'weekly') {
+                document.getElementById('weekly-view').classList.add('active');
+                // Generate week buttons and load current week
+                generateWeekButtons();
+            } else if (view === 'historical') {
+                document.getElementById('historical-view').classList.add('active');
+                // Load historical data without requiring event parameter
+                loadHistoricalDataInitial(currentWeeks);
+            } else if (view === 'monthly') {
+                document.getElementById('monthly-view').classList.add('active');
+                // Generate month buttons and load first month
+                generateMonthButtons();
+            } else if (view === 'zone-training') {
+                document.getElementById('zone-training-view').classList.add('active');
+                // Load zone training data
+                loadZoneTrainingData();
+            }
+        }
         
         function loadDaysAgo(daysAgo) {
             const targetDate = new Date();
@@ -300,6 +537,73 @@
                 });
         }
         
+        function loadHistoricalData(weeks, event) {
+            currentWeeks = weeks;
+            
+            // Update active button
+            document.querySelectorAll('.period-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.currentTarget.classList.add('active');
+            
+            loadHistoricalDataInitial(weeks);
+        }
+        
+        function loadHistoricalDataInitial(weeks) {
+            // Show loading
+            document.getElementById('historical-chart').innerHTML = `
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Loading ${weeks} weeks of historical data...</p>
+                </div>
+            `;
+            document.getElementById('historical-stats-container').innerHTML = '';
+            
+            // Fetch historical data
+            fetch(`/get_historical_data?weeks=${weeks}`)
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(err => {
+                            throw new Error(err.error || 'Failed to load data');
+                        });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // Parse chart data
+                    const chartData = JSON.parse(data.chart);
+                    
+                    // Clear the chart div first
+                    document.getElementById('historical-chart').innerHTML = '';
+                    
+                    // Display chart
+                    Plotly.newPlot('historical-chart', chartData.data, chartData.layout, {
+                        responsive: true,
+                        displayModeBar: true,
+                        displaylogo: false
+                    });
+                    
+                    // Display statistics
+                    displayHistoricalStats(data.stats);
+                })
+                .catch(error => {
+                    document.getElementById('historical-chart').innerHTML = `
+                        <div class="error">
+                            <h3>⚠️ Error Loading Historical Data</h3>
+                            <p>${error.message}</p>
+                            <p style="margin-top: 10px; font-size: 0.9em;">
+                                This could mean:<br>
+                                • No activity was recorded in this period<br>
+                                • Your Garmin device was not worn<br>
+                                • The data has not synced yet<br>
+                                • Invalid credentials in config.json
+                            </p>
+                        </div>
+                    `;
+                    console.error('Error:', error);
+                });
+        }
+        
         function displayStats(stats) {
             const statsHtml = `
                 <div class="stats">
@@ -326,6 +630,310 @@
                 </div>
             `;
             document.getElementById('stats-container').innerHTML = statsHtml;
+        }
+        
+        function displayHistoricalStats(stats) {
+            const statsHtml = `
+                <div class="stats">
+                    <div class="stat-card">
+                        <h3>Average Heart Rate</h3>
+                        <p>${stats.average} bpm</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Maximum Heart Rate</h3>
+                        <p>${stats.maximum} bpm</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Minimum Heart Rate</h3>
+                        <p>${stats.minimum} bpm</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Time in Z2</h3>
+                        <p>${stats.time_z2}</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Time in Z4+5</h3>
+                        <p>${stats.time_z4_z5}</p>
+                    </div>
+                </div>
+            `;
+            document.getElementById('historical-stats-container').innerHTML = statsHtml;
+        }
+        
+        // Weekly view functions
+        function getISOWeek(date) {
+            // Calculate ISO week number (week starts on Monday)
+            const d = new Date(date);
+            d.setHours(0, 0, 0, 0);
+            // Thursday in current week decides the year
+            d.setDate(d.getDate() + 4 - (d.getDay() || 7));
+            const yearStart = new Date(d.getFullYear(), 0, 1);
+            const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+            return [d.getFullYear(), weekNo];
+        }
+        
+        function generateWeekButtons() {
+            const weekButtonsContainer = document.getElementById('week-buttons');
+            const today = new Date();
+            let html = '';
+            
+            // Generate buttons for last 6 weeks (including current week)
+            for (let i = 0; i < 6; i++) {
+                const weekDate = new Date(today);
+                weekDate.setDate(weekDate.getDate() - (i * 7));
+                const [year, week] = getISOWeek(weekDate);
+                const yearShort = year.toString().slice(-2);
+                const label = `CW${week} '${yearShort}`;
+                const activeClass = i === 0 ? ' active' : '';
+                
+                html += `<button class="period-button${activeClass}" onclick="loadWeeklyData(${year}, ${week}, event)">${label}</button>`;
+            }
+            
+            weekButtonsContainer.innerHTML = html;
+            
+            // Load current week data
+            const [currentYear, currentWeek] = getISOWeek(today);
+            loadWeeklyDataInitial(currentYear, currentWeek);
+        }
+        
+        function loadWeeklyData(year, week, event) {
+            // Update active button
+            document.querySelectorAll('#week-buttons .period-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            loadWeeklyDataInitial(year, week);
+        }
+        
+        function loadWeeklyDataInitial(year, week) {
+            const chartDiv = document.getElementById('weekly-chart');
+            chartDiv.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading week data...</p></div>';
+            
+            fetch(`/get_weekly_data?year=${year}&week=${week}`)
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(err => {
+                            throw new Error(err.error || 'Failed to load data');
+                        });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // Parse chart JSON string
+                    const chartData = JSON.parse(data.chart);
+                    
+                    // Clear and display the chart
+                    chartDiv.innerHTML = '';
+                    Plotly.newPlot('weekly-chart', chartData.data, chartData.layout, {
+                        responsive: true,
+                        displayModeBar: true,
+                        displaylogo: false
+                    });
+                    
+                    // Display statistics
+                    displayWeeklyStats(data.stats);
+                })
+                .catch(error => {
+                    console.error('Error loading weekly data:', error);
+                    chartDiv.innerHTML = `
+                        <div class="error">
+                            <h3>⚠️ Error Loading Data</h3>
+                            <p>${error.message}</p>
+                        </div>
+                    `;
+                });
+        }
+        
+        function displayWeeklyStats(stats) {
+            const statsHtml = `
+                <div class="stats">
+                    <div class="stat-card">
+                        <h3>Average Heart Rate</h3>
+                        <p>${stats.average} bpm</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Maximum Heart Rate</h3>
+                        <p>${stats.maximum} bpm</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Minimum Heart Rate</h3>
+                        <p>${stats.minimum} bpm</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Time in Z2</h3>
+                        <p>${stats.time_z2}</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Time in Z4+5</h3>
+                        <p>${stats.time_z4_z5}</p>
+                    </div>
+                </div>
+            `;
+            document.getElementById('weekly-stats-container').innerHTML = statsHtml;
+        }
+        
+        // Monthly view functions
+        function generateMonthButtons() {
+            const monthButtonsContainer = document.getElementById('month-buttons');
+            const today = new Date();
+            let html = '';
+            
+            // Generate buttons for last 6 months (including current month)
+            for (let i = 0; i < 6; i++) {
+                const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
+                const year = date.getFullYear();
+                const month = date.getMonth() + 1; // 0-indexed, so add 1
+                const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+                                   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                const monthName = monthNames[date.getMonth()];
+                const yearShort = String(year).slice(-2); // Get last 2 digits
+                const label = `${monthName} '${yearShort}`;
+                const activeClass = i === 0 ? ' active' : '';
+                
+                html += `<button class="period-btn${activeClass}" onclick="loadMonthlyData(${year}, ${month}, event)">${label}</button>`;
+            }
+            
+            monthButtonsContainer.innerHTML = html;
+            
+            // Load data for the first month (current month)
+            const currentYear = today.getFullYear();
+            const currentMonth = today.getMonth() + 1;
+            loadMonthlyDataInitial(currentYear, currentMonth);
+        }
+        
+        function loadMonthlyData(year, month, event) {
+            // Update active button
+            document.querySelectorAll('#month-buttons .period-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.currentTarget.classList.add('active');
+            
+            loadMonthlyDataInitial(year, month);
+        }
+        
+        function loadMonthlyDataInitial(year, month) {
+            const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+                               'July', 'August', 'September', 'October', 'November', 'December'];
+            const monthName = monthNames[month - 1];
+            
+            // Show loading
+            document.getElementById('monthly-chart').innerHTML = `
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Loading data for ${monthName} ${year}...</p>
+                </div>
+            `;
+            document.getElementById('monthly-stats-container').innerHTML = '';
+            
+            // Fetch monthly data
+            fetch(`/get_monthly_data?year=${year}&month=${month}`)
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(err => {
+                            throw new Error(err.error || 'Failed to load data');
+                        });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // Parse chart data
+                    const chartData = JSON.parse(data.chart);
+                    
+                    // Clear the chart div first
+                    document.getElementById('monthly-chart').innerHTML = '';
+                    
+                    // Display chart
+                    Plotly.newPlot('monthly-chart', chartData.data, chartData.layout, {
+                        responsive: true,
+                        displayModeBar: true,
+                        displaylogo: false
+                    });
+                    
+                    // Display statistics
+                    displayMonthlyStats(data.stats);
+                })
+                .catch(error => {
+                    document.getElementById('monthly-chart').innerHTML = `
+                        <div class="error">
+                            <h3>⚠️ Error Loading Monthly Data</h3>
+                            <p>${error.message}</p>
+                            <p style="margin-top: 10px; font-size: 0.9em;">
+                                This could mean:<br>
+                                • No activity was recorded in this month<br>
+                                • Your Garmin device was not worn<br>
+                                • The data has not synced yet<br>
+                                • Invalid credentials in config.json
+                            </p>
+                        </div>
+                    `;
+                    console.error('Error:', error);
+                });
+        }
+        
+        function displayMonthlyStats(stats) {
+            const statsHtml = `
+                <div class="stats">
+                    <div class="stat-card">
+                        <h3>Average Heart Rate</h3>
+                        <p>${stats.average} bpm</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Maximum Heart Rate</h3>
+                        <p>${stats.maximum} bpm</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Minimum Heart Rate</h3>
+                        <p>${stats.minimum} bpm</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Time in Z2</h3>
+                        <p>${stats.time_z2}</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Time in Z4+5</h3>
+                        <p>${stats.time_z4_z5}</p>
+                    </div>
+                </div>
+            `;
+            document.getElementById('monthly-stats-container').innerHTML = statsHtml;
+        }
+        
+        // Zone Training view functions
+        function loadZoneTrainingData() {
+            const chartDiv = document.getElementById('zone-training-chart');
+            chartDiv.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading zone training data...</p></div>';
+            
+            fetch('/get_zone_training_data')
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(err => {
+                            throw new Error(err.error || 'Failed to load data');
+                        });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // Parse chart JSON string
+                    const chartData = JSON.parse(data.chart);
+                    
+                    // Clear and display the chart
+                    chartDiv.innerHTML = '';
+                    Plotly.newPlot('zone-training-chart', chartData.data, chartData.layout, {
+                        responsive: true,
+                        displayModeBar: true,
+                        displaylogo: false
+                    });
+                })
+                .catch(error => {
+                    chartDiv.innerHTML = `
+                        <div class="loading">
+                            <p style="color: #e74c3c;">Error loading zone training data</p>
+                            <p style="font-size: 14px; color: #666;">${error.message}</p>
+                        </div>
+                    `;
+                    console.error('Error:', error);
+                });
         }
     </script>
 </body>
