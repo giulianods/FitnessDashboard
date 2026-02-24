@@ -265,8 +265,8 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
             
             # Add fitted lognormal curve
             fig.add_trace(go.Scatter(
-                x=x_fit,
-                y=y_fit,
+                x=x_fit.tolist(),
+                y=y_fit.tolist(),
                 mode='lines',
                 line=dict(color='#FF6347', width=2.5, dash='solid'),
                 name='Lognormal Fit',
@@ -782,8 +782,8 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
             x_fit = x_fit_shifted + min_hr
             
             fig.add_trace(go.Scatter(
-                x=x_fit,
-                y=y_fit,
+                x=x_fit.tolist(),
+                y=y_fit.tolist(),
                 mode='lines',
                 line=dict(color='#FF6347', width=2.5, dash='solid'),
                 name='Lognormal Fit',
