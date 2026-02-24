@@ -226,8 +226,8 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
         # Add bar chart with gradient colors (using Bar instead of Histogram for color control)
         fig.add_trace(go.Bar(
             x=bin_centers,
-            y=hist_density,
-            width=bin_width * 0.9,  # Slightly narrower to show separation
+            y=hist_density.tolist(),
+            width=float(bin_width * 0.9),  # Slightly narrower to show separation
             orientation='v',
             marker=dict(
                 color=bin_colors,
@@ -756,8 +756,8 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
         # Add bar chart with gradient colors (using Bar instead of Histogram for color control)
         fig.add_trace(go.Bar(
             x=bin_centers,
-            y=hist_density,
-            width=bin_width * 0.9,  # Slightly narrower to show separation
+            y=hist_density.tolist(),
+            width=float(bin_width * 0.9),  # Slightly narrower to show separation
             orientation='v',
             marker=dict(
                 color=bin_colors,
