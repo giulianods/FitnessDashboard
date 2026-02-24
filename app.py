@@ -1298,6 +1298,26 @@ def get_zone_training_data():
             ),
             row=1, col=1
         )
+        # 10-period moving average for Daily Z2
+        ma_period = 10  # shared for both daily and weekly MA
+        daily_z2_ma = [
+            sum((v or 0) for v in daily_z2[i - ma_period + 1:i + 1]) / ma_period
+            if i >= ma_period - 1 else None
+            for i in range(len(daily_z2))
+        ]
+        fig.add_trace(
+            go.Scatter(
+                x=last_28_dates,
+                y=daily_z2_ma,
+                mode='lines',
+                line=dict(color='darkgreen', width=2, dash='solid'),
+                name='10-day MA',
+                showlegend=False,
+                customdata=[format_time(v) if v is not None else '' for v in daily_z2_ma],
+                hovertemplate='<b>%{x}</b><br>10-day MA: %{customdata}<extra></extra>'
+            ),
+            row=1, col=1
+        )
         
         # Chart B: Daily Z4+Z5 (top-right)
         fig.add_trace(
@@ -1323,6 +1343,25 @@ def get_zone_training_data():
                 showlegend=False,
                 customdata=[format_time(v) for v in weekly_z2_values],
                 hovertemplate='<b>%{x}</b><br>Time: %{customdata}<extra></extra>'
+            ),
+            row=2, col=1
+        )
+        # 10-period moving average for Weekly Z2
+        weekly_z2_ma = [
+            sum((v or 0) for v in weekly_z2_values[i - ma_period + 1:i + 1]) / ma_period
+            if i >= ma_period - 1 else None
+            for i in range(len(weekly_z2_values))
+        ]
+        fig.add_trace(
+            go.Scatter(
+                x=last_52_weeks,
+                y=weekly_z2_ma,
+                mode='lines',
+                line=dict(color='darkgreen', width=2, dash='solid'),
+                name='10-week MA',
+                showlegend=False,
+                customdata=[format_time(v) if v is not None else '' for v in weekly_z2_ma],
+                hovertemplate='<b>%{x}</b><br>10-week MA: %{customdata}<extra></extra>'
             ),
             row=2, col=1
         )
