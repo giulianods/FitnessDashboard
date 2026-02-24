@@ -74,8 +74,8 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
     # Garmin HR Zones (Z-1 to Z5) based on max HR
     # Z-1 is below 40%, Z0 is 40-50%, Z1-Z5 are the training zones
     garmin_zones = {
-        'Z-1': (0, max_hr * 0.40, 'Below Rest'),  # Zone -1: <40%
-        'Z0': (max_hr * 0.40, max_hr * 0.50, 'Rest'),  # Zone 0: 40-50%
+        'Z-1': (0, max_hr * 0.40, 'Rest'),  # Zone -1: <40%
+        'Z0': (max_hr * 0.40, max_hr * 0.50, 'Moving'),  # Zone 0: 40-50%
         'Z1': (max_hr * 0.50, max_hr * 0.60, 'Very Light'),  # Zone 1: 50-60%
         'Z2': (max_hr * 0.60, max_hr * 0.70, 'Light'),  # Zone 2: 60-70%
         'Z3': (max_hr * 0.70, max_hr * 0.80, 'Moderate'),  # Zone 3: 70-80%
@@ -467,8 +467,8 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
     
     # Garmin HR Zones
     garmin_zones = {
-        'Z-1': (0, max_hr * 0.40, 'Below Rest'),
-        'Z0': (max_hr * 0.40, max_hr * 0.50, 'Rest'),
+        'Z-1': (0, max_hr * 0.40, 'Rest'),
+        'Z0': (max_hr * 0.40, max_hr * 0.50, 'Moving'),
         'Z1': (max_hr * 0.50, max_hr * 0.60, 'Very Light'),
         'Z2': (max_hr * 0.60, max_hr * 0.70, 'Light'),
         'Z3': (max_hr * 0.70, max_hr * 0.80, 'Moderate'),
@@ -1192,8 +1192,8 @@ def get_zone_training_data():
         # Calculate daily zone times
         max_hr = DEFAULT_MAX_HR
         garmin_zones = {
-            'Z-1': (0, max_hr * 0.40, 'Below Rest'),
-            'Z0': (max_hr * 0.40, max_hr * 0.50, 'Rest'),
+            'Z-1': (0, max_hr * 0.40, 'Rest'),
+            'Z0': (max_hr * 0.40, max_hr * 0.50, 'Moving'),
             'Z1': (max_hr * 0.50, max_hr * 0.60, 'Very Light'),
             'Z2': (max_hr * 0.60, max_hr * 0.70, 'Light'),
             'Z3': (max_hr * 0.70, max_hr * 0.80, 'Moderate'),
