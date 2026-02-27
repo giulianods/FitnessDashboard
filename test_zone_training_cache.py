@@ -275,3 +275,148 @@ def test_bulk_lookup_stale_row_excluded():
         assert result == {}, "Stale row should be excluded from bulk result"
     finally:
         shutil.rmtree(temp_dir)
+
+
+# ── Tests for set_zone_training_days_bulk ─────────────────────────────────────
+
+def test_bulk_write_stores_all_rows():
+    """set_zone_training_days_bulk persists every row in one transaction"""
+    temp_dir = tempfile.mkdtemp()
+    try:
+        cache = CacheManager(cache_dir=temp_dir)
+        rows = [
+            {'date_str': '2025-05-01', 'z_neg1': 1, 'z0': 2, 'z1': 10, 'z2': 20, 'z3': 5, 'z4_z5': 3},
+            {'date_str': '2025-05-02', 'z_neg1': 2, 'z0': 3, 'z1': 11, 'z2': 21, 'z3': 6, 'z4_z5': 4},
+        ]
+        cache.set_zone_training_days_bulk(rows)
+
+        r1 = cache.get_zone_training_day('2025-05-01')
+        r2 = cache.get_zone_training_day('2025-05-02')
+        assert r1 is not None and r1['z1_minutes'] == 10
+        assert r2 is not None and r2['z2_minutes'] == 21
+    finally:
+        shutil.rmtree(temp_dir)
+
+
+def test_bulk_write_skips_today():
+    """set_zone_training_days_bulk silently skips today's date"""
+    temp_dir = tempfile.mkdtemp()
+    try:
+        cache = CacheManager(cache_dir=temp_dir)
+        today = datetime.now().strftime('%Y-%m-%d')
+        rows = [
+            {'date_str': today, 'z_neg1': 0, 'z0': 0, 'z1': 99, 'z2': 0, 'z3': 0, 'z4_z5': 0},
+        ]
+        cache.set_zone_training_days_bulk(rows)
+        assert cache.get_zone_training_day(today) is None
+    finally:
+        shutil.rmtree(temp_dir)
+
+
+def test_bulk_write_empty_input():
+    """set_zone_training_days_bulk handles empty list without error"""
+    temp_dir = tempfile.mkdtemp()
+    try:
+        cache = CacheManager(cache_dir=temp_dir)
+        cache.set_zone_training_days_bulk([])  # should not raise
+    finally:
+        shutil.rmtree(temp_dir)
+
+
+# ── Tests for get_heart_rate_data_bulk ────────────────────────────────────────
+
+def _make_hr_point(ts_str, bpm):
+    return {'timestamp': datetime.fromisoformat(ts_str), 'heart_rate': bpm}
+
+
+def test_hr_bulk_empty_input():
+    """get_heart_rate_data_bulk returns empty dict for empty input"""
+    temp_dir = tempfile.mkdtemp()
+    try:
+        cache = CacheManager(cache_dir=temp_dir)
+        assert cache.get_heart_rate_data_bulk([]) == {}
+    finally:
+        shutil.rmtree(temp_dir)
+
+
+def test_hr_bulk_all_miss():
+    """Returns empty dict when none of the dates are in cache"""
+    temp_dir = tempfile.mkdtemp()
+    try:
+        cache = CacheManager(cache_dir=temp_dir)
+        result = cache.get_heart_rate_data_bulk(['2025-06-01', '2025-06-02'])
+        assert result == {}
+    finally:
+        shutil.rmtree(temp_dir)
+
+
+def test_hr_bulk_all_hits():
+    """All stored dates are returned in a single bulk query"""
+    temp_dir = tempfile.mkdtemp()
+    try:
+        cache = CacheManager(cache_dir=temp_dir)
+        d1 = datetime(2025, 6, 1)
+        d2 = datetime(2025, 6, 2)
+        pts1 = [_make_hr_point('2025-06-01T09:00:00', 65)]
+        pts2 = [_make_hr_point('2025-06-02T10:00:00', 70)]
+        cache.set_heart_rate_data(d1, pts1)
+        cache.set_heart_rate_data(d2, pts2)
+
+        result = cache.get_heart_rate_data_bulk(['2025-06-01', '2025-06-02'])
+        assert '2025-06-01' in result
+        assert '2025-06-02' in result
+        assert result['2025-06-01'][0]['heart_rate'] == 65
+        assert result['2025-06-02'][0]['heart_rate'] == 70
+    finally:
+        shutil.rmtree(temp_dir)
+
+
+def test_hr_bulk_partial_hits():
+    """Only stored dates appear in the result; missing dates are absent"""
+    temp_dir = tempfile.mkdtemp()
+    try:
+        cache = CacheManager(cache_dir=temp_dir)
+        d1 = datetime(2025, 7, 1)
+        pts = [_make_hr_point('2025-07-01T08:00:00', 60)]
+        cache.set_heart_rate_data(d1, pts)
+
+        result = cache.get_heart_rate_data_bulk(['2025-07-01', '2025-07-02', '2025-07-03'])
+        assert '2025-07-01' in result
+        assert '2025-07-02' not in result
+        assert '2025-07-03' not in result
+    finally:
+        shutil.rmtree(temp_dir)
+
+
+def test_hr_bulk_no_data_sentinel():
+    """Dates cached as NO_DATA (None) are included in bulk result as None"""
+    temp_dir = tempfile.mkdtemp()
+    try:
+        cache = CacheManager(cache_dir=temp_dir)
+        d1 = datetime(2025, 8, 1)
+        cache.set_heart_rate_data(d1, None)
+
+        result = cache.get_heart_rate_data_bulk(['2025-08-01'])
+        assert '2025-08-01' in result
+        assert result['2025-08-01'] is None
+    finally:
+        shutil.rmtree(temp_dir)
+
+
+def test_hr_bulk_populates_memory_cache():
+    """Bulk DB read should warm the per-date memory cache"""
+    temp_dir = tempfile.mkdtemp()
+    try:
+        cache = CacheManager(cache_dir=temp_dir)
+        d = datetime(2025, 9, 1)
+        pts = [_make_hr_point('2025-09-01T09:00:00', 72)]
+        cache.set_heart_rate_data(d, pts)
+
+        # Clear memory cache to force DB read
+        cache._memory_cache['hr'].clear()
+
+        # Bulk read should populate memory cache
+        cache.get_heart_rate_data_bulk(['2025-09-01'])
+        assert '2025-09-01' in cache._memory_cache['hr']
+    finally:
+        shutil.rmtree(temp_dir)

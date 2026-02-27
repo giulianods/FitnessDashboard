@@ -316,6 +316,129 @@ class CacheManager:
         self._memory_cache['hrv'][date_str] = (value, cached_at)
         logger.debug(f"Cached HRV data for {date_str} (value: {value})")
     
+    def get_heart_rate_data_bulk(self, date_strings: List[str]) -> Dict[str, Optional[List[Dict]]]:
+        """
+        Get cached heart rate data for multiple dates in a single SQL query.
+
+        Checks the in-memory cache first for each date, then issues one SQL
+        query for all remaining dates.  The memory cache is populated for every
+        database hit so subsequent per-date calls are free.
+
+        Args:
+            date_strings: List of date strings in 'YYYY-MM-DD' format
+
+        Returns:
+            Dict mapping date_str -> list-of-HR-points (or None for "NO_DATA"
+            sentinel rows).  Dates that are absent or whose cached_at has
+            expired are simply omitted from the result.
+        """
+        if not date_strings:
+            return {}
+
+        result: Dict[str, Optional[List[Dict]]] = {}
+        db_lookup_dates = []
+
+        # TIER 1: serve as many dates as possible from memory cache
+        for date_str in date_strings:
+            if date_str in self._memory_cache['hr']:
+                data, cached_at = self._memory_cache['hr'][date_str]
+                if self._is_cache_valid(cached_at):
+                    result[date_str] = data
+                else:
+                    del self._memory_cache['hr'][date_str]
+                    db_lookup_dates.append(date_str)
+            else:
+                db_lookup_dates.append(date_str)
+
+        if not db_lookup_dates:
+            logger.debug(
+                f"Bulk HR cache: {len(result)}/{len(date_strings)} memory hits"
+            )
+            return result
+
+        # TIER 2: one SQL query for all remaining dates
+        placeholders = ','.join('?' * len(db_lookup_dates))
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                f'SELECT date, data, cached_at FROM heart_rate_data '
+                f'WHERE date IN ({placeholders})',
+                db_lookup_dates,
+            )
+            rows = cursor.fetchall()
+
+        expired_dates = []
+        for date_str, data_json, cached_at in rows:
+            if not self._is_cache_valid(cached_at):
+                expired_dates.append(date_str)
+                continue
+
+            if data_json == '"NO_DATA"':
+                parsed: Optional[List[Dict]] = None
+            else:
+                parsed = json.loads(data_json)
+                for point in parsed:
+                    point['timestamp'] = datetime.fromisoformat(point['timestamp'])
+
+            result[date_str] = parsed
+            # Populate memory cache so future per-date lookups are free
+            self._memory_cache['hr'][date_str] = (parsed, cached_at)
+
+        # Clean up any expired rows found in the bulk read
+        if expired_dates:
+            with sqlite3.connect(self.db_path) as conn:
+                expired_placeholders = ','.join('?' * len(expired_dates))
+                conn.execute(
+                    f'DELETE FROM heart_rate_data WHERE date IN ({expired_placeholders})',
+                    expired_dates,
+                )
+                conn.commit()
+
+        logger.debug(
+            f"Bulk HR cache: {len(result)}/{len(date_strings)} hits "
+            f"({len(result) - (len(date_strings) - len(db_lookup_dates))} from DB)"
+        )
+        return result
+
+    def set_zone_training_days_bulk(self, rows: List[Dict]) -> None:
+        """
+        Cache pre-computed zone training minutes for multiple dates in a single
+        SQLite transaction.  Today's date is automatically skipped.
+
+        Args:
+            rows: List of dicts, each with keys:
+                'date_str', 'z_neg1', 'z0', 'z1', 'z2', 'z3', 'z4_z5'
+        """
+        if not rows:
+            return
+
+        today_str = datetime.now().strftime('%Y-%m-%d')
+        cached_at = datetime.now().isoformat()
+
+        filtered = [r for r in rows if r['date_str'] != today_str]
+        if not filtered:
+            return
+
+        with sqlite3.connect(self.db_path) as conn:
+            conn.executemany(
+                '''INSERT OR REPLACE INTO zone_training_cache
+                       (date, z_neg1_minutes, z0_minutes, z1_minutes,
+                        z2_minutes, z3_minutes, z4_z5_minutes, cached_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                [
+                    (
+                        r['date_str'],
+                        r['z_neg1'], r['z0'], r['z1'],
+                        r['z2'], r['z3'], r['z4_z5'],
+                        cached_at,
+                    )
+                    for r in filtered
+                ],
+            )
+            conn.commit()
+
+        logger.debug(f"Bulk-cached zone training for {len(filtered)} dates")
+
     def get_zone_training_days_bulk(self, date_strings: List[str]) -> Dict[str, Dict]:
         """
         Get cached zone training minutes for multiple dates in a single SQL query.

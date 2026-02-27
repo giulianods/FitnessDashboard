@@ -1173,27 +1173,49 @@ def get_zone_training_data():
                 'Z5':  0.0,
             }
 
-        # ── Step 2: fetch HR from Garmin API only for cache-miss dates ──
-        # Include today (always recomputed) plus any historical dates not in cache.
+        # ── Step 2: for zone cache-miss dates, bulk-fetch HR data from HR cache ──
+        # One SQL query for all cache-miss dates, then only call Garmin API for
+        # dates that are absent from BOTH zone cache and HR cache.
         cache_miss_dates = [ds for ds in historical_dates if ds not in cached_zone_data]
         if today_str in all_dates:
             cache_miss_dates.append(today_str)
 
-        for date_str in sorted(cache_miss_dates):
-            current_date = datetime.strptime(date_str, '%Y-%m-%d')
-            # Fetch only HR data – HRV is not used in this dashboard
-            hr_data = client.get_heart_rate_data(current_date)
+        if cache_miss_dates and zone_cache is not None:
+            # Exclude today – it is always re-fetched from the API
+            hr_bulk_dates = [ds for ds in cache_miss_dates if ds < today_str]
+            # zone_cache holds the CacheManager instance which also manages HR data
+            cached_hr_bulk = zone_cache.get_heart_rate_data_bulk(hr_bulk_dates)
+        else:
+            cached_hr_bulk = {}
 
+        # Separate into: (a) HR served from cache, (b) must hit Garmin API
+        hr_from_cache = {}   # date_str -> hr_data list (may be None = no data)
+        api_fetch_dates = []
+        for date_str in cache_miss_dates:
+            if date_str < today_str and date_str in cached_hr_bulk:
+                hr_from_cache[date_str] = cached_hr_bulk[date_str]
+            else:
+                api_fetch_dates.append(date_str)
+
+        # Build a combined iterable: cached HR data + fresh API data
+        def _iter_hr_data():
+            for ds, hr_data in hr_from_cache.items():
+                yield ds, hr_data
+            for ds in sorted(api_fetch_dates):
+                current_date = datetime.strptime(ds, '%Y-%m-%d')
+                yield ds, client.get_heart_rate_data(current_date)
+
+        # Compute zone times; collect all new rows for a single batch write
+        new_zone_rows = []
+        for date_str, hr_data in _iter_hr_data():
             if not hr_data:
                 continue
 
-            # Filter waking hours data
             waking_hours_data = [
                 p for p in hr_data
                 if WAKING_HOURS_START <= p['timestamp'].hour < WAKING_HOURS_END
             ]
 
-            # Calculate zone distribution
             zone_counts = {zone: 0 for zone in garmin_zones.keys()}
             for point in waking_hours_data:
                 hr = point['heart_rate']
@@ -1211,17 +1233,21 @@ def get_zone_training_data():
 
             daily_zone_times[date_str] = zone_times
 
-            # Persist computed values for historical days
-            if zone_cache is not None and date_str < today_str:
-                zone_cache.set_zone_training_day(
-                    date_str,
-                    zone_times['Z-1'],
-                    zone_times['Z0'],
-                    zone_times['Z1'],
-                    zone_times['Z2'],
-                    zone_times['Z3'],
-                    zone_times['Z4'] + zone_times['Z5']
-                )
+            # Queue for batch write (skip today – handled inside bulk write)
+            if zone_cache is not None:
+                new_zone_rows.append({
+                    'date_str': date_str,
+                    'z_neg1': zone_times['Z-1'],
+                    'z0':     zone_times['Z0'],
+                    'z1':     zone_times['Z1'],
+                    'z2':     zone_times['Z2'],
+                    'z3':     zone_times['Z3'],
+                    'z4_z5':  zone_times['Z4'] + zone_times['Z5'],
+                })
+
+        # Persist all newly-computed zone rows in a single transaction
+        if new_zone_rows and zone_cache is not None:
+            zone_cache.set_zone_training_days_bulk(new_zone_rows)
 
         if not daily_zone_times:
             return jsonify({
