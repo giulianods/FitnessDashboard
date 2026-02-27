@@ -26,6 +26,17 @@ WAKING_HOURS_DURATION = 16 * 60  # Duration of waking hours in minutes (6:00-22:
 WAKING_HOURS_START = 6  # Start of waking hours (6:00 AM)
 WAKING_HOURS_END = 22  # End of waking hours (10:00 PM)
 
+# Zone colour palette – single source of truth for all bar charts
+ZONE_COLORS = {
+    'Z-1': '#B0B0B0',  # discreet mid-gray
+    'Z0':  '#9B8EC4',  # muted violet
+    'Z1':  '#87CEEB',  # sky blue (light warm-up)
+    'Z2':  '#5EBA58',  # pleasant green (slightly warm)
+    'Z3':  '#F4A428',  # amber / orange-yellow
+    'Z4':  '#E05252',  # moderate red
+    'Z5':  '#8B1A1A',  # dark intense red
+}
+
 def format_time(minutes):
     """Format time in minutes to human-readable hours and minutes string."""
     hours = int(minutes // 60)
@@ -187,8 +198,8 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
     zone_names = list(garmin_zones.keys())
     zone_time_values = [zone_times[z] for z in garmin_zones.keys()]
     zone_labels = [f"{z} - {garmin_zones[z][2]}" for z in garmin_zones.keys()]
-    # Standardized zone colors: Z-1=dark grey, Z0=grey, Z1=light blue, Z2=green, Z3=orange, Z4=red, Z5=dark red
-    zone_colors_bar = ['#505050', '#808080', '#87CEEB', '#00FF00', '#FFA500', '#FF0000', '#8B0000']
+    # Standardized zone colors: Z-1=gray, Z0=violet, Z1=sky-blue, Z2=green, Z3=amber, Z4=red, Z5=dark-red
+    zone_colors_bar = [ZONE_COLORS[z] for z in ['Z-1', 'Z0', 'Z1', 'Z2', 'Z3', 'Z4', 'Z5']]
     
     fig.add_trace(go.Bar(
         y=zone_labels,
@@ -643,8 +654,8 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
     zone_names = list(garmin_zones.keys())
     zone_time_values = [total_zone_times[z] for z in zone_names]
     zone_labels = [f"{z} - {garmin_zones[z][2]}" for z in zone_names]
-    # Updated zone colors: Z-1=dark grey, Z0=grey, Z1=light blue, Z2=green, Z3=yellow/orange, Z4=red, Z5=dark red
-    zone_colors = ['#505050', '#808080', '#87CEEB', '#00FF00', '#FFA500', '#FF0000', '#8B0000']
+    # Zone colors: Z-1=gray, Z0=violet, Z1=sky-blue, Z2=green, Z3=amber, Z4=red, Z5=dark-red
+    zone_colors = [ZONE_COLORS[z] for z in ['Z-1', 'Z0', 'Z1', 'Z2', 'Z3', 'Z4', 'Z5']]
     
     fig.add_trace(go.Bar(
         y=zone_labels,
@@ -1312,7 +1323,7 @@ def get_zone_training_data():
             go.Bar(
                 x=last_28_dates,
                 y=daily_z1,
-                marker_color='steelblue',
+                marker_color=ZONE_COLORS['Z1'],
                 name='Z1',
                 showlegend=False,
                 customdata=[format_time(v) for v in daily_z1],
@@ -1344,7 +1355,7 @@ def get_zone_training_data():
             go.Bar(
                 x=last_52_weeks,
                 y=weekly_z1_values,
-                marker_color='steelblue',
+                marker_color=ZONE_COLORS['Z1'],
                 name='Z1',
                 showlegend=False,
                 customdata=[format_time(v) for v in weekly_z1_values],
@@ -1376,7 +1387,7 @@ def get_zone_training_data():
             go.Bar(
                 x=last_28_dates,
                 y=daily_z2,
-                marker_color='green',
+                marker_color=ZONE_COLORS['Z2'],
                 name='Z2',
                 showlegend=False,
                 customdata=[format_time(v) for v in daily_z2],
@@ -1408,7 +1419,7 @@ def get_zone_training_data():
             go.Bar(
                 x=last_52_weeks,
                 y=weekly_z2_values,
-                marker_color='green',
+                marker_color=ZONE_COLORS['Z2'],
                 name='Z2',
                 showlegend=False,
                 customdata=[format_time(v) for v in weekly_z2_values],
@@ -1435,12 +1446,12 @@ def get_zone_training_data():
             row=2, col=2
         )
 
-        # Row 3 Col 1: Daily Z4+Z5 (red bars)
+        # Row 3 Col 1: Daily Z4+Z5 (Z4 color used – Z4 dominates hard/max effort time)
         fig.add_trace(
             go.Bar(
                 x=last_28_dates,
                 y=daily_z4_z5,
-                marker_color='red',
+                marker_color=ZONE_COLORS['Z4'],
                 name='Z4+Z5',
                 showlegend=False,
                 customdata=[format_time(v) for v in daily_z4_z5],
@@ -1449,12 +1460,12 @@ def get_zone_training_data():
             row=3, col=1
         )
 
-        # Row 3 Col 2: Weekly Z4+Z5
+        # Row 3 Col 2: Weekly Z4+Z5 (Z4 color used – Z4 dominates hard/max effort time)
         fig.add_trace(
             go.Bar(
                 x=last_52_weeks,
                 y=weekly_z4_z5_values,
-                marker_color='red',
+                marker_color=ZONE_COLORS['Z4'],
                 name='Z4+Z5',
                 showlegend=False,
                 customdata=[format_time(v) for v in weekly_z4_z5_values],
@@ -1610,8 +1621,7 @@ def get_zone_calendar_data():
         zone_order = ['Z-1', 'Z0', 'Z1', 'Z2', 'Z3', 'Z4']
         zone_labels = {'Z-1': 'Z-1 Rest', 'Z0': 'Z0 Moving', 'Z1': 'Z1 Very Light',
                        'Z2': 'Z2 Light', 'Z3': 'Z3 Moderate', 'Z4': 'Z4+Z5 Hard/Max'}
-        zone_colors = {'Z-1': '#505050', 'Z0': '#808080', 'Z1': '#87CEEB',
-                       'Z2': '#00CC44', 'Z3': '#FFA500', 'Z4': '#CC0000'}
+        zone_colors = {k: ZONE_COLORS[k] for k in ['Z-1', 'Z0', 'Z1', 'Z2', 'Z3', 'Z4']}
 
         # Weekday labels
         day_names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
