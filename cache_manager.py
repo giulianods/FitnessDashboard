@@ -316,6 +316,52 @@ class CacheManager:
         self._memory_cache['hrv'][date_str] = (value, cached_at)
         logger.debug(f"Cached HRV data for {date_str} (value: {value})")
     
+    def get_zone_training_days_bulk(self, date_strings: List[str]) -> Dict[str, Dict]:
+        """
+        Get cached zone training minutes for multiple dates in a single SQL query.
+
+        Args:
+            date_strings: List of date strings in 'YYYY-MM-DD' format
+
+        Returns:
+            Dict mapping date_str -> zone_data_dict for every date that has a
+            valid cached row.  Dates that are absent or have NULL zone columns
+            (stale pre-migration rows) are simply omitted from the result.
+        """
+        if not date_strings:
+            return {}
+
+        placeholders = ','.join('?' * len(date_strings))
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                f'SELECT date, z_neg1_minutes, z0_minutes, z1_minutes, '
+                f'z2_minutes, z3_minutes, z4_z5_minutes '
+                f'FROM zone_training_cache WHERE date IN ({placeholders})',
+                date_strings,
+            )
+            rows = cursor.fetchall()
+
+        result = {}
+        for date_str, z_neg1, z0, z1, z2, z3, z4_z5 in rows:
+            # Skip stale rows that are missing zone columns (old schema)
+            if any(v is None for v in (z_neg1, z0, z1, z2, z3, z4_z5)):
+                logger.debug(f"Zone training cache STALE (missing columns) for {date_str}")
+                continue
+            result[date_str] = {
+                'z_neg1_minutes': z_neg1,
+                'z0_minutes': z0,
+                'z1_minutes': z1,
+                'z2_minutes': z2,
+                'z3_minutes': z3,
+                'z4_z5_minutes': z4_z5,
+            }
+
+        logger.debug(
+            f"Bulk zone training cache: {len(result)}/{len(date_strings)} hits"
+        )
+        return result
+
     def get_zone_training_day(self, date_str: str) -> Optional[Dict]:
         """
         Get cached zone training minutes for a specific date.

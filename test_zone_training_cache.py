@@ -170,3 +170,108 @@ def test_zone_training_cache_skips_today():
         assert result is None, "Today's zone data must not be cached"
     finally:
         shutil.rmtree(temp_dir)
+
+
+# ── Tests for bulk lookup ──────────────────────────────────────────────────────
+
+def test_bulk_lookup_empty_input():
+    """get_zone_training_days_bulk returns empty dict for empty input"""
+    temp_dir = tempfile.mkdtemp()
+    try:
+        cache = CacheManager(cache_dir=temp_dir)
+        result = cache.get_zone_training_days_bulk([])
+        assert result == {}
+    finally:
+        shutil.rmtree(temp_dir)
+
+
+def test_bulk_lookup_all_hits():
+    """All stored dates are returned in a single bulk query"""
+    temp_dir = tempfile.mkdtemp()
+    try:
+        cache = CacheManager(cache_dir=temp_dir)
+        _set(cache, '2025-01-01', z1=10.0, z2=20.0, z4_z5=5.0)
+        _set(cache, '2025-01-02', z1=15.0, z2=25.0, z4_z5=8.0)
+        _set(cache, '2025-01-03', z1=12.0, z2=22.0, z4_z5=6.0)
+
+        result = cache.get_zone_training_days_bulk(
+            ['2025-01-01', '2025-01-02', '2025-01-03']
+        )
+        assert len(result) == 3
+        assert result['2025-01-01']['z1_minutes'] == 10.0
+        assert result['2025-01-02']['z2_minutes'] == 25.0
+        assert result['2025-01-03']['z4_z5_minutes'] == 6.0
+    finally:
+        shutil.rmtree(temp_dir)
+
+
+def test_bulk_lookup_partial_hits():
+    """Only stored dates are returned; missing dates are absent from result"""
+    temp_dir = tempfile.mkdtemp()
+    try:
+        cache = CacheManager(cache_dir=temp_dir)
+        _set(cache, '2025-02-01', z2=30.0)
+
+        result = cache.get_zone_training_days_bulk(
+            ['2025-02-01', '2025-02-02', '2025-02-03']
+        )
+        assert '2025-02-01' in result
+        assert '2025-02-02' not in result
+        assert '2025-02-03' not in result
+    finally:
+        shutil.rmtree(temp_dir)
+
+
+def test_bulk_lookup_all_miss():
+    """Returns empty dict when none of the requested dates are cached"""
+    temp_dir = tempfile.mkdtemp()
+    try:
+        cache = CacheManager(cache_dir=temp_dir)
+        result = cache.get_zone_training_days_bulk(['2025-03-01', '2025-03-02'])
+        assert result == {}
+    finally:
+        shutil.rmtree(temp_dir)
+
+
+def test_bulk_lookup_skips_today():
+    """Today's date is never stored (set_zone_training_day skips it),
+    so bulk lookup returns empty for today"""
+    temp_dir = tempfile.mkdtemp()
+    try:
+        cache = CacheManager(cache_dir=temp_dir)
+        today = datetime.now().strftime('%Y-%m-%d')
+        # Attempt to cache today (should be silently skipped)
+        _set(cache, today, z2=99.0)
+        result = cache.get_zone_training_days_bulk([today])
+        assert result == {}, "Today should not be in bulk cache"
+    finally:
+        shutil.rmtree(temp_dir)
+
+
+def test_bulk_lookup_stale_row_excluded():
+    """Rows with NULL zone columns (old schema) are excluded from bulk results"""
+    temp_dir = tempfile.mkdtemp()
+    try:
+        # Simulate an old database that has the table without z_neg1/z0/z3 columns
+        db_path = f"{temp_dir}/garmin_cache.db"
+        with sqlite3.connect(db_path) as conn:
+            conn.execute('''
+                CREATE TABLE zone_training_cache (
+                    date TEXT PRIMARY KEY,
+                    z2_minutes REAL NOT NULL,
+                    z4_z5_minutes REAL NOT NULL,
+                    cached_at TEXT NOT NULL
+                )
+            ''')
+            conn.execute(
+                "INSERT INTO zone_training_cache (date, z2_minutes, z4_z5_minutes, cached_at) "
+                "VALUES ('2025-04-01', 4.0, 6.0, '2025-04-01T00:00:00')"
+            )
+            conn.commit()
+
+        # CacheManager migration adds missing columns with NULL for existing rows
+        cache = CacheManager(cache_dir=temp_dir)
+        result = cache.get_zone_training_days_bulk(['2025-04-01'])
+        assert result == {}, "Stale row should be excluded from bulk result"
+    finally:
+        shutil.rmtree(temp_dir)

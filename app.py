@@ -1126,37 +1126,19 @@ def get_zone_training_data():
     """API endpoint to get zone training data for last 364 days (52 weeks)"""
     try:
         client = get_garmin_client()
-        
-        # Fetch last 364 days (52 weeks)
+
+        # Determine the 364-day window (last 52 weeks, inclusive of today)
         end_date = datetime.now().date()
         start_date = end_date - timedelta(days=364)
-        
-        # Fetch data day by day (GarminClient doesn't have get_weeks_data method)
-        weeks_data = {}
-        current_date = datetime.combine(start_date, datetime.min.time())
-        end_datetime = datetime.combine(end_date, datetime.min.time())
-        
-        while current_date <= end_datetime:
-            date_str = current_date.strftime('%Y-%m-%d')
-            hr_data = client.get_heart_rate_data(current_date)
-            hrv_data = client.get_hrv_data(current_date)
-            
-            # Only include days with actual data
-            if hr_data or hrv_data:
-                weeks_data[date_str] = {
-                    'hr_data': hr_data if hr_data else [],
-                    'hrv': hrv_data
-                }
-            
-            current_date += timedelta(days=1)
-        
-        if not weeks_data:
-            return jsonify({
-                'error': 'No heart rate data found for the last 52 weeks',
-                'message': 'No activity was recorded in this period or data has not synced yet'
-            }), 404
-        
-        # Calculate daily zone times
+        today_str = end_date.strftime('%Y-%m-%d')
+
+        # Build the full ordered list of date strings for the window
+        all_dates = []
+        d = start_date
+        while d <= end_date:
+            all_dates.append(d.strftime('%Y-%m-%d'))
+            d += timedelta(days=1)
+
         max_hr = DEFAULT_MAX_HR
         garmin_zones = {
             'Z-1': (0, max_hr * 0.40, 'Rest'),
@@ -1167,82 +1149,86 @@ def get_zone_training_data():
             'Z4': (max_hr * 0.80, max_hr * 0.90, 'Hard'),
             'Z5': (max_hr * 0.90, max_hr * 1.00, 'Maximum'),
         }
-        
-        # Use zone training cache for historical days (anything before today).
-        # Today's data is always recomputed so the current day stays up to date.
-        today_str = end_date.strftime('%Y-%m-%d')
+
         zone_cache = client.cache  # CacheManager instance (may be None if caching disabled)
 
-        # Calculate zone times per day
+        # ── Step 1: bulk-fetch zone training cache for all historical dates ──
+        # A single SQL query replaces up to 364 individual per-day lookups.
+        historical_dates = [ds for ds in all_dates if ds < today_str]
+        if zone_cache is not None:
+            cached_zone_data = zone_cache.get_zone_training_days_bulk(historical_dates)
+        else:
+            cached_zone_data = {}
+
+        # Populate daily_zone_times from the bulk cache result
         daily_zone_times = {}
-        for date_str in sorted(weeks_data.keys()):
-            # Try cache for historical dates
+        for date_str, cached in cached_zone_data.items():
+            daily_zone_times[date_str] = {
+                'Z-1': cached['z_neg1_minutes'],
+                'Z0':  cached['z0_minutes'],
+                'Z1':  cached['z1_minutes'],
+                'Z2':  cached['z2_minutes'],
+                'Z3':  cached['z3_minutes'],
+                'Z4':  cached['z4_z5_minutes'],
+                'Z5':  0.0,
+            }
+
+        # ── Step 2: fetch HR from Garmin API only for cache-miss dates ──
+        # Include today (always recomputed) plus any historical dates not in cache.
+        cache_miss_dates = [ds for ds in historical_dates if ds not in cached_zone_data]
+        if today_str in all_dates:
+            cache_miss_dates.append(today_str)
+
+        for date_str in sorted(cache_miss_dates):
+            current_date = datetime.strptime(date_str, '%Y-%m-%d')
+            # Fetch only HR data – HRV is not used in this dashboard
+            hr_data = client.get_heart_rate_data(current_date)
+
+            if not hr_data:
+                continue
+
+            # Filter waking hours data
+            waking_hours_data = [
+                p for p in hr_data
+                if WAKING_HOURS_START <= p['timestamp'].hour < WAKING_HOURS_END
+            ]
+
+            # Calculate zone distribution
+            zone_counts = {zone: 0 for zone in garmin_zones.keys()}
+            for point in waking_hours_data:
+                hr = point['heart_rate']
+                for zone_name, (lower, upper, _) in garmin_zones.items():
+                    if lower <= hr < upper:
+                        zone_counts[zone_name] += 1
+                        break
+
+            total_points = sum(zone_counts.values())
+            zone_times = {
+                zone: (zone_counts[zone] / total_points) * WAKING_HOURS_DURATION
+                       if total_points > 0 else 0
+                for zone in zone_counts
+            }
+
+            daily_zone_times[date_str] = zone_times
+
+            # Persist computed values for historical days
             if zone_cache is not None and date_str < today_str:
-                cached = zone_cache.get_zone_training_day(date_str)
-                if cached is not None:
-                    # Reconstruct the minimal dict expected by downstream code
-                    daily_zone_times[date_str] = {
-                        'Z-1': cached['z_neg1_minutes'],
-                        'Z0': cached['z0_minutes'],
-                        'Z1': cached['z1_minutes'],
-                        'Z2': cached['z2_minutes'],
-                        'Z3': cached['z3_minutes'],
-                        'Z4': cached['z4_z5_minutes'],
-                        'Z5': 0.0,
-                    }
-                    continue
+                zone_cache.set_zone_training_day(
+                    date_str,
+                    zone_times['Z-1'],
+                    zone_times['Z0'],
+                    zone_times['Z1'],
+                    zone_times['Z2'],
+                    zone_times['Z3'],
+                    zone_times['Z4'] + zone_times['Z5']
+                )
 
-            entry = weeks_data[date_str]
-            
-            # Handle both old format (list) and new format (dict)
-            if isinstance(entry, dict):
-                data = entry.get('hr_data', [])
-            else:
-                data = entry
-            
-            if data:
-                # Filter waking hours data using configured hours
-                waking_hours_data = []
-                for point in data:
-                    hour = point['timestamp'].hour
-                    if WAKING_HOURS_START <= hour < WAKING_HOURS_END:
-                        waking_hours_data.append(point)
-                
-                # Calculate zone distribution for this day
-                zone_counts = {zone: 0 for zone in garmin_zones.keys()}
-                for point in waking_hours_data:
-                    hr = point['heart_rate']
-                    for zone_name, (lower, upper, _) in garmin_zones.items():
-                        if lower <= hr < upper:
-                            zone_counts[zone_name] += 1
-                            break
-                
-                # Convert counts to time in minutes
-                # Assumes data points are evenly spaced throughout waking hours
-                # Each point's proportion of total points represents its time share
-                total_points = sum(zone_counts.values())
-                zone_times = {}
-                for zone in zone_counts:
-                    if total_points > 0:
-                        time_minutes = (zone_counts[zone] / total_points) * WAKING_HOURS_DURATION
-                        zone_times[zone] = time_minutes
-                    else:
-                        zone_times[zone] = 0
-                
-                daily_zone_times[date_str] = zone_times
+        if not daily_zone_times:
+            return jsonify({
+                'error': 'No heart rate data found for the last 52 weeks',
+                'message': 'No activity was recorded in this period or data has not synced yet'
+            }), 404
 
-                # Persist computed values for historical days so future requests skip recomputation
-                if zone_cache is not None and date_str < today_str:
-                    zone_cache.set_zone_training_day(
-                        date_str,
-                        zone_times['Z-1'],
-                        zone_times['Z0'],
-                        zone_times['Z1'],
-                        zone_times['Z2'],
-                        zone_times['Z3'],
-                        zone_times['Z4'] + zone_times['Z5']
-                    )
-        
         # Prepare data for charts
         # Last 28 days for daily charts (or fewer if less data available)
         last_28_dates = sorted(daily_zone_times.keys())[-28:]
