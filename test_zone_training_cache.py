@@ -7,6 +7,11 @@ import tempfile
 from cache_manager import CacheManager
 
 
+def _set(cache, date_str, *, z_neg1=0.0, z0=0.0, z1=0.0, z2=0.0, z3=0.0, z4_z5=0.0):
+    """Helper to call set_zone_training_day with all required args."""
+    cache.set_zone_training_day(date_str, z_neg1, z0, z1, z2, z3, z4_z5)
+
+
 def test_zone_training_cache_miss():
     """get_zone_training_day returns None when no entry is stored"""
     temp_dir = tempfile.mkdtemp()
@@ -23,12 +28,15 @@ def test_zone_training_cache_roundtrip():
     temp_dir = tempfile.mkdtemp()
     try:
         cache = CacheManager(cache_dir=temp_dir)
-        cache.set_zone_training_day('2026-01-15', z1_minutes=30.0, z2_minutes=45.0, z4_z5_minutes=20.5)
+        _set(cache, '2026-01-15', z_neg1=200.0, z0=100.0, z1=30.0, z2=45.0, z3=10.0, z4_z5=20.5)
 
         result = cache.get_zone_training_day('2026-01-15')
         assert result is not None, "Expected a cache hit"
+        assert result['z_neg1_minutes'] == 200.0
+        assert result['z0_minutes'] == 100.0
         assert result['z1_minutes'] == 30.0, f"Expected z1=30.0, got {result['z1_minutes']}"
         assert result['z2_minutes'] == 45.0, f"Expected z2=45.0, got {result['z2_minutes']}"
+        assert result['z3_minutes'] == 10.0
         assert result['z4_z5_minutes'] == 20.5, f"Expected z4_z5=20.5, got {result['z4_z5_minutes']}"
     finally:
         shutil.rmtree(temp_dir)
@@ -39,8 +47,8 @@ def test_zone_training_cache_upsert():
     temp_dir = tempfile.mkdtemp()
     try:
         cache = CacheManager(cache_dir=temp_dir)
-        cache.set_zone_training_day('2026-02-01', z1_minutes=10.0, z2_minutes=30.0, z4_z5_minutes=10.0)
-        cache.set_zone_training_day('2026-02-01', z1_minutes=20.0, z2_minutes=50.0, z4_z5_minutes=15.0)
+        _set(cache, '2026-02-01', z1=10.0, z2=30.0, z4_z5=10.0)
+        _set(cache, '2026-02-01', z1=20.0, z2=50.0, z4_z5=15.0)
 
         result = cache.get_zone_training_day('2026-02-01')
         assert result is not None
@@ -56,8 +64,8 @@ def test_zone_training_cache_multiple_dates():
     temp_dir = tempfile.mkdtemp()
     try:
         cache = CacheManager(cache_dir=temp_dir)
-        cache.set_zone_training_day('2026-03-01', z1_minutes=15.0, z2_minutes=60.0, z4_z5_minutes=5.0)
-        cache.set_zone_training_day('2026-03-02', z1_minutes=5.0, z2_minutes=0.0, z4_z5_minutes=90.0)
+        _set(cache, '2026-03-01', z1=15.0, z2=60.0, z4_z5=5.0)
+        _set(cache, '2026-03-02', z1=5.0, z2=0.0, z4_z5=90.0)
 
         r1 = cache.get_zone_training_day('2026-03-01')
         r2 = cache.get_zone_training_day('2026-03-02')
@@ -74,7 +82,7 @@ def test_zone_training_cache_persists_across_instances():
     temp_dir = tempfile.mkdtemp()
     try:
         cache1 = CacheManager(cache_dir=temp_dir)
-        cache1.set_zone_training_day('2026-04-10', z1_minutes=12.0, z2_minutes=75.0, z4_z5_minutes=25.0)
+        _set(cache1, '2026-04-10', z1=12.0, z2=75.0, z4_z5=25.0)
 
         # New instance reads from same DB
         cache2 = CacheManager(cache_dir=temp_dir)
@@ -92,7 +100,7 @@ def test_clear_all_removes_zone_training_cache():
     temp_dir = tempfile.mkdtemp()
     try:
         cache = CacheManager(cache_dir=temp_dir)
-        cache.set_zone_training_day('2026-05-01', z1_minutes=8.0, z2_minutes=40.0, z4_z5_minutes=10.0)
+        _set(cache, '2026-05-01', z1=8.0, z2=40.0, z4_z5=10.0)
         cache.clear_all()
 
         result = cache.get_zone_training_day('2026-05-01')
@@ -101,11 +109,11 @@ def test_clear_all_removes_zone_training_cache():
         shutil.rmtree(temp_dir)
 
 
-def test_zone_training_cache_null_z1_treated_as_miss():
-    """Rows written before Z1 tracking (z1_minutes is NULL after migration) are treated as cache misses"""
+def test_zone_training_cache_stale_row_treated_as_miss():
+    """Rows written with old schema (missing zone columns, NULL after migration) are cache misses"""
     temp_dir = tempfile.mkdtemp()
     try:
-        # Simulate an old database that has the table without z1_minutes
+        # Simulate an old database that has the table without z_neg1/z0/z3 columns
         db_path = f"{temp_dir}/garmin_cache.db"
         with sqlite3.connect(db_path) as conn:
             conn.execute('''
@@ -122,9 +130,28 @@ def test_zone_training_cache_null_z1_treated_as_miss():
             )
             conn.commit()
 
-        # Opening with a new CacheManager runs ALTER TABLE, leaving z1_minutes NULL for old rows
+        # Opening with a new CacheManager runs ALTER TABLE, leaving new columns NULL for old rows
         cache = CacheManager(cache_dir=temp_dir)
         result = cache.get_zone_training_day('2025-12-01')
-        assert result is None, "Row with NULL z1_minutes should be treated as a cache miss"
+        assert result is None, "Stale row with NULL zone columns should be treated as a cache miss"
+    finally:
+        shutil.rmtree(temp_dir)
+
+
+def test_zone_training_cache_all_zones_stored():
+    """All 6 zone values are stored and retrieved correctly"""
+    temp_dir = tempfile.mkdtemp()
+    try:
+        cache = CacheManager(cache_dir=temp_dir)
+        _set(cache, '2026-06-01', z_neg1=400.0, z0=200.0, z1=120.0, z2=100.0, z3=60.0, z4_z5=80.0)
+
+        result = cache.get_zone_training_day('2026-06-01')
+        assert result is not None
+        assert result['z_neg1_minutes'] == 400.0
+        assert result['z0_minutes'] == 200.0
+        assert result['z1_minutes'] == 120.0
+        assert result['z2_minutes'] == 100.0
+        assert result['z3_minutes'] == 60.0
+        assert result['z4_z5_minutes'] == 80.0
     finally:
         shutil.rmtree(temp_dir)

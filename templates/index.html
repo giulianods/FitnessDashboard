@@ -294,6 +294,9 @@
         <div class="menu-item" onclick="switchView('zone-training', event)" title="Zone Training">
             💪
         </div>
+        <div class="menu-item" onclick="switchView('zone-calendar', event)" title="Zone Calendar">
+            🗓️
+        </div>
     </div>
     
     <div class="container">
@@ -414,6 +417,18 @@
                 </div>
             </div>
         </div>
+
+        <!-- Zone Calendar View (6th dashboard) -->
+        <div id="zone-calendar-view" class="view">
+            <div class="chart-container">
+                <div id="zone-calendar-chart">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <p>Loading zone calendar data...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
     
     <script>
@@ -464,6 +479,9 @@
                 document.getElementById('zone-training-view').classList.add('active');
                 // Load zone training data
                 loadZoneTrainingData();
+            } else if (view === 'zone-calendar') {
+                document.getElementById('zone-calendar-view').classList.add('active');
+                loadZoneCalendarData();
             }
         }
         
@@ -929,6 +947,38 @@
                     chartDiv.innerHTML = `
                         <div class="loading">
                             <p style="color: #e74c3c;">Error loading zone training data</p>
+                            <p style="font-size: 14px; color: #666;">${error.message}</p>
+                        </div>
+                    `;
+                    console.error('Error:', error);
+                });
+        }
+        function loadZoneCalendarData() {
+            const chartDiv = document.getElementById('zone-calendar-chart');
+            chartDiv.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading zone calendar data...</p></div>';
+
+            fetch('/get_zone_calendar_data')
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(err => {
+                            throw new Error(err.error || 'Failed to load data');
+                        });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    const chartData = JSON.parse(data.chart);
+                    chartDiv.innerHTML = '';
+                    Plotly.newPlot('zone-calendar-chart', chartData.data, chartData.layout, {
+                        responsive: true,
+                        displayModeBar: true,
+                        displaylogo: false
+                    });
+                })
+                .catch(error => {
+                    chartDiv.innerHTML = `
+                        <div class="loading">
+                            <p style="color: #e74c3c;">Error loading zone calendar data</p>
                             <p style="font-size: 14px; color: #666;">${error.message}</p>
                         </div>
                     `;

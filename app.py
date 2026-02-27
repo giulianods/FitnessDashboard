@@ -1215,8 +1215,11 @@ def get_zone_training_data():
                 if cached is not None:
                     # Reconstruct the minimal dict expected by downstream code
                     daily_zone_times[date_str] = {
+                        'Z-1': cached['z_neg1_minutes'],
+                        'Z0': cached['z0_minutes'],
                         'Z1': cached['z1_minutes'],
                         'Z2': cached['z2_minutes'],
+                        'Z3': cached['z3_minutes'],
                         'Z4': cached['z4_z5_minutes'],
                         'Z5': 0.0,
                     }
@@ -1265,8 +1268,11 @@ def get_zone_training_data():
                 if zone_cache is not None and date_str < today_str:
                     zone_cache.set_zone_training_day(
                         date_str,
+                        zone_times['Z-1'],
+                        zone_times['Z0'],
                         zone_times['Z1'],
                         zone_times['Z2'],
+                        zone_times['Z3'],
                         zone_times['Z4'] + zone_times['Z5']
                     )
         
@@ -1522,6 +1528,188 @@ def get_zone_training_data():
             'chart': chart_json
         })
         
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+
+
+@app.route('/get_zone_calendar_data')
+def get_zone_calendar_data():
+    """API endpoint for the 6th dashboard: stacked-bar zone calendar.
+
+    Returns 5 rows (current ISO week + 4 prior), each row Mon–Sun.
+    Each day shows all zones (Z-1 through Z4+Z5) as a stacked vertical bar.
+    """
+    try:
+        client = get_garmin_client()
+
+        # Determine the 5-week window: current ISO week's Monday back to 4 prior Mondays
+        today = datetime.now().date()
+        # Monday of current ISO week
+        current_monday = today - timedelta(days=today.weekday())
+        # We need 5 full weeks starting from 4 weeks before current_monday
+        window_start = current_monday - timedelta(weeks=4)
+        # Fetch up to today (current week may be partial)
+        window_end = today
+
+        # Fetch HR data for the window
+        days_data = {}
+        current_date = datetime.combine(window_start, datetime.min.time())
+        end_datetime = datetime.combine(window_end, datetime.min.time())
+        while current_date <= end_datetime:
+            date_str = current_date.strftime('%Y-%m-%d')
+            hr_data = client.get_heart_rate_data(current_date)
+            if hr_data:
+                days_data[date_str] = hr_data
+            current_date += timedelta(days=1)
+
+        max_hr = DEFAULT_MAX_HR
+        garmin_zones = {
+            'Z-1': (0, max_hr * 0.40, 'Rest'),
+            'Z0':  (max_hr * 0.40, max_hr * 0.50, 'Moving'),
+            'Z1':  (max_hr * 0.50, max_hr * 0.60, 'Very Light'),
+            'Z2':  (max_hr * 0.60, max_hr * 0.70, 'Light'),
+            'Z3':  (max_hr * 0.70, max_hr * 0.80, 'Moderate'),
+            'Z4':  (max_hr * 0.80, max_hr * 0.90, 'Hard'),
+            'Z5':  (max_hr * 0.90, max_hr * 1.00, 'Maximum'),
+        }
+
+        today_str = today.strftime('%Y-%m-%d')
+        zone_cache = client.cache
+
+        def compute_zone_times(date_str, hr_data):
+            """Compute zone minutes from HR data for one day, using waking hours."""
+            waking = [p for p in hr_data if WAKING_HOURS_START <= p['timestamp'].hour < WAKING_HOURS_END]
+            zone_counts = {z: 0 for z in garmin_zones}
+            for point in waking:
+                hr = point['heart_rate']
+                for zone_name, (lo, hi, _) in garmin_zones.items():
+                    if lo <= hr < hi:
+                        zone_counts[zone_name] += 1
+                        break
+            total = sum(zone_counts.values())
+            times = {}
+            for z in zone_counts:
+                times[z] = (zone_counts[z] / total) * WAKING_HOURS_DURATION if total > 0 else 0.0
+            return times
+
+        # Compute or retrieve zone times for each day in the window
+        daily_zone_times = {}
+        for d in sorted(days_data.keys()):
+            if zone_cache is not None and d < today_str:
+                cached = zone_cache.get_zone_training_day(d)
+                if cached is not None:
+                    daily_zone_times[d] = {
+                        'Z-1': cached['z_neg1_minutes'],
+                        'Z0':  cached['z0_minutes'],
+                        'Z1':  cached['z1_minutes'],
+                        'Z2':  cached['z2_minutes'],
+                        'Z3':  cached['z3_minutes'],
+                        'Z4':  cached['z4_z5_minutes'],
+                        'Z5':  0.0,
+                    }
+                    continue
+            zt = compute_zone_times(d, days_data[d])
+            daily_zone_times[d] = zt
+            if zone_cache is not None and d < today_str:
+                zone_cache.set_zone_training_day(
+                    d,
+                    zt['Z-1'], zt['Z0'], zt['Z1'],
+                    zt['Z2'], zt['Z3'],
+                    zt['Z4'] + zt['Z5']
+                )
+
+        # Build 5-week rows (oldest first)
+        weeks = []
+        for w in range(4, -1, -1):
+            monday = current_monday - timedelta(weeks=w)
+            days_of_week = [monday + timedelta(days=d) for d in range(7)]
+            weeks.append(days_of_week)
+
+        # Zones ordered for stacking; combined Z4+Z5 shown as one layer
+        zone_order = ['Z-1', 'Z0', 'Z1', 'Z2', 'Z3', 'Z4']
+        zone_labels = {'Z-1': 'Z-1 Rest', 'Z0': 'Z0 Moving', 'Z1': 'Z1 Very Light',
+                       'Z2': 'Z2 Light', 'Z3': 'Z3 Moderate', 'Z4': 'Z4+Z5 Hard/Max'}
+        zone_colors = {'Z-1': '#505050', 'Z0': '#808080', 'Z1': '#87CEEB',
+                       'Z2': '#00CC44', 'Z3': '#FFA500', 'Z4': '#CC0000'}
+
+        # Weekday labels
+        day_names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
+        # Build subplot grid: 5 rows × 1 col
+        week_titles = []
+        for w_days in weeks:
+            monday = w_days[0]
+            sunday = w_days[6]
+            week_titles.append(f"Week of {monday.strftime('%b %d')} – {sunday.strftime('%b %d, %Y')}")
+
+        fig = make_subplots(
+            rows=5, cols=1,
+            subplot_titles=week_titles,
+            vertical_spacing=0.08
+        )
+
+        # Add stacked bar traces; only add to legend for first row
+        for row_idx, w_days in enumerate(weeks, start=1):
+            x_labels = []
+            for day in w_days:
+                d_str = day.strftime('%Y-%m-%d')
+                x_labels.append(f"{day_names[day.weekday()]}<br>{day.strftime('%m/%d')}")
+
+            for zone_key in zone_order:
+                y_vals = []
+                custom_vals = []
+                for day in w_days:
+                    d_str = day.strftime('%Y-%m-%d')
+                    zt = daily_zone_times.get(d_str, {})
+                    minutes = zt.get(zone_key, 0)
+                    # For Z4 bar include both Z4 and Z5 (Z5 stored as 0 from cache, but computed from actual)
+                    if zone_key == 'Z4':
+                        minutes += zt.get('Z5', 0)
+                    y_vals.append(minutes)
+                    custom_vals.append(format_time(minutes))
+
+                fig.add_trace(
+                    go.Bar(
+                        x=x_labels,
+                        y=y_vals,
+                        name=zone_labels[zone_key],
+                        marker_color=zone_colors[zone_key],
+                        showlegend=(row_idx == 1),
+                        legendgroup=zone_key,
+                        customdata=custom_vals,
+                        hovertemplate='<b>%{x}</b><br>' + zone_labels[zone_key] + ': %{customdata}<extra></extra>'
+                    ),
+                    row=row_idx, col=1
+                )
+
+        # Global Y-axis: max waking hours in minutes
+        max_y = WAKING_HOURS_DURATION
+
+        for row_idx in range(1, 6):
+            fig.update_xaxes(tickangle=0, row=row_idx, col=1)
+            fig.update_yaxes(
+                title_text='Minutes',
+                range=[0, max_y],
+                tickvals=list(range(0, max_y + 1, 120)),
+                ticktext=[format_time(v) for v in range(0, max_y + 1, 120)],
+                row=row_idx, col=1
+            )
+
+        fig.update_layout(
+            barmode='stack',
+            height=1400,
+            showlegend=True,
+            legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1),
+            title_text='Zone Calendar – Last 4 Weeks + Current',
+            title_x=0.5,
+            margin=dict(t=120, b=60, l=80, r=60)
+        )
+
+        chart_json = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
+        return jsonify({'chart': chart_json})
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
