@@ -1215,6 +1215,7 @@ def get_zone_training_data():
                 if cached is not None:
                     # Reconstruct the minimal dict expected by downstream code
                     daily_zone_times[date_str] = {
+                        'Z1': cached['z1_minutes'],
                         'Z2': cached['z2_minutes'],
                         'Z4': cached['z4_z5_minutes'],
                         'Z5': 0.0,
@@ -1264,6 +1265,7 @@ def get_zone_training_data():
                 if zone_cache is not None and date_str < today_str:
                     zone_cache.set_zone_training_day(
                         date_str,
+                        zone_times['Z1'],
                         zone_times['Z2'],
                         zone_times['Z4'] + zone_times['Z5']
                     )
@@ -1271,11 +1273,13 @@ def get_zone_training_data():
         # Prepare data for charts
         # Last 28 days for daily charts (or fewer if less data available)
         last_28_dates = sorted(daily_zone_times.keys())[-28:]
+        daily_z1 = [daily_zone_times[date].get('Z1', 0) for date in last_28_dates]
         daily_z2 = [daily_zone_times[date]['Z2'] for date in last_28_dates]
         daily_z4_z5 = [daily_zone_times[date]['Z4'] + daily_zone_times[date]['Z5'] for date in last_28_dates]
         num_daily_days = len(last_28_dates)
         
         # Aggregate by ISO calendar week for weekly charts
+        weekly_z1 = {}
         weekly_z2 = {}
         weekly_z4_z5 = {}
         for date_str, zone_times in daily_zone_times.items():
@@ -1283,34 +1287,106 @@ def get_zone_training_data():
             year, week, _ = date_obj.isocalendar()
             week_key = f"{year}-W{week:02d}"
             
-            if week_key not in weekly_z2:
+            if week_key not in weekly_z1:
+                weekly_z1[week_key] = 0
                 weekly_z2[week_key] = 0
                 weekly_z4_z5[week_key] = 0
             
+            weekly_z1[week_key] += zone_times.get('Z1', 0)
             weekly_z2[week_key] += zone_times['Z2']
             weekly_z4_z5[week_key] += zone_times['Z4'] + zone_times['Z5']
         
         # Get last 52 weeks (or fewer if less data available)
         last_52_weeks = sorted(weekly_z2.keys())[-52:]
+        weekly_z1_values = [weekly_z1[week] for week in last_52_weeks]
         weekly_z2_values = [weekly_z2[week] for week in last_52_weeks]
         weekly_z4_z5_values = [weekly_z4_z5[week] for week in last_52_weeks]
         num_weekly_weeks = len(last_52_weeks)
         
-        # Create 2x2 subplot with dynamic titles based on actual data
+        # Create 3x2 subplot: daily charts on the left column, weekly on the right
+        # Row 1: Z1  |  Row 2: Z2  |  Row 3: Z4+Z5
         daily_title = f'Last {num_daily_days} Days' if num_daily_days < 28 else 'Last 28 Days'
         weekly_title = f'Last {num_weekly_weeks} Weeks' if num_weekly_weeks < 52 else 'Last 52 Weeks'
         
         fig = make_subplots(
-            rows=2, cols=2,
-            subplot_titles=(f'Daily Z2 Time ({daily_title})', 
+            rows=3, cols=2,
+            subplot_titles=(f'Daily Z1 Time ({daily_title})',
+                          f'Weekly Z1 Time ({weekly_title})',
+                          f'Daily Z2 Time ({daily_title})',
+                          f'Weekly Z2 Time ({weekly_title})',
                           f'Daily Z4+Z5 Time ({daily_title})',
-                          f'Weekly Z2 Time ({weekly_title})', 
                           f'Weekly Z4+Z5 Time ({weekly_title})'),
-            vertical_spacing=0.15,
+            vertical_spacing=0.10,
             horizontal_spacing=0.1
         )
         
-        # Chart A: Daily Z2 (top-left)
+        ma_period = 10  # shared MA window
+
+        # Row 1 Col 1: Daily Z1 (light-blue bars)
+        fig.add_trace(
+            go.Bar(
+                x=last_28_dates,
+                y=daily_z1,
+                marker_color='steelblue',
+                name='Z1',
+                showlegend=False,
+                customdata=[format_time(v) for v in daily_z1],
+                hovertemplate='<b>%{x}</b><br>Time: %{customdata}<extra></extra>'
+            ),
+            row=1, col=1
+        )
+        daily_z1_ma = [
+            sum((v or 0) for v in daily_z1[i - ma_period + 1:i + 1]) / ma_period
+            if i >= ma_period - 1 else None
+            for i in range(len(daily_z1))
+        ]
+        fig.add_trace(
+            go.Scatter(
+                x=last_28_dates,
+                y=daily_z1_ma,
+                mode='lines',
+                line=dict(color='darkblue', width=2, dash='solid'),
+                name='10-day MA',
+                showlegend=False,
+                customdata=[format_time(v) if v is not None else '' for v in daily_z1_ma],
+                hovertemplate='<b>%{x}</b><br>10-day MA: %{customdata}<extra></extra>'
+            ),
+            row=1, col=1
+        )
+
+        # Row 1 Col 2: Weekly Z1
+        fig.add_trace(
+            go.Bar(
+                x=last_52_weeks,
+                y=weekly_z1_values,
+                marker_color='steelblue',
+                name='Z1',
+                showlegend=False,
+                customdata=[format_time(v) for v in weekly_z1_values],
+                hovertemplate='<b>%{x}</b><br>Time: %{customdata}<extra></extra>'
+            ),
+            row=1, col=2
+        )
+        weekly_z1_ma = [
+            sum((v or 0) for v in weekly_z1_values[i - ma_period + 1:i + 1]) / ma_period
+            if i >= ma_period - 1 else None
+            for i in range(len(weekly_z1_values))
+        ]
+        fig.add_trace(
+            go.Scatter(
+                x=last_52_weeks,
+                y=weekly_z1_ma,
+                mode='lines',
+                line=dict(color='darkblue', width=2, dash='solid'),
+                name='10-week MA',
+                showlegend=False,
+                customdata=[format_time(v) if v is not None else '' for v in weekly_z1_ma],
+                hovertemplate='<b>%{x}</b><br>10-week MA: %{customdata}<extra></extra>'
+            ),
+            row=1, col=2
+        )
+
+        # Row 2 Col 1: Daily Z2 (green bars)
         fig.add_trace(
             go.Bar(
                 x=last_28_dates,
@@ -1321,10 +1397,8 @@ def get_zone_training_data():
                 customdata=[format_time(v) for v in daily_z2],
                 hovertemplate='<b>%{x}</b><br>Time: %{customdata}<extra></extra>'
             ),
-            row=1, col=1
+            row=2, col=1
         )
-        # 10-period moving average for Daily Z2
-        ma_period = 10  # shared for both daily and weekly MA
         daily_z2_ma = [
             sum((v or 0) for v in daily_z2[i - ma_period + 1:i + 1]) / ma_period
             if i >= ma_period - 1 else None
@@ -1341,24 +1415,10 @@ def get_zone_training_data():
                 customdata=[format_time(v) if v is not None else '' for v in daily_z2_ma],
                 hovertemplate='<b>%{x}</b><br>10-day MA: %{customdata}<extra></extra>'
             ),
-            row=1, col=1
+            row=2, col=1
         )
-        
-        # Chart B: Daily Z4+Z5 (top-right)
-        fig.add_trace(
-            go.Bar(
-                x=last_28_dates,
-                y=daily_z4_z5,
-                marker_color='red',
-                name='Z4+Z5',
-                showlegend=False,
-                customdata=[format_time(v) for v in daily_z4_z5],
-                hovertemplate='<b>%{x}</b><br>Time: %{customdata}<extra></extra>'
-            ),
-            row=1, col=2
-        )
-        
-        # Chart C: Weekly Z2 (bottom-left)
+
+        # Row 2 Col 2: Weekly Z2
         fig.add_trace(
             go.Bar(
                 x=last_52_weeks,
@@ -1369,9 +1429,8 @@ def get_zone_training_data():
                 customdata=[format_time(v) for v in weekly_z2_values],
                 hovertemplate='<b>%{x}</b><br>Time: %{customdata}<extra></extra>'
             ),
-            row=2, col=1
+            row=2, col=2
         )
-        # 10-period moving average for Weekly Z2
         weekly_z2_ma = [
             sum((v or 0) for v in weekly_z2_values[i - ma_period + 1:i + 1]) / ma_period
             if i >= ma_period - 1 else None
@@ -1388,10 +1447,24 @@ def get_zone_training_data():
                 customdata=[format_time(v) if v is not None else '' for v in weekly_z2_ma],
                 hovertemplate='<b>%{x}</b><br>10-week MA: %{customdata}<extra></extra>'
             ),
-            row=2, col=1
+            row=2, col=2
         )
-        
-        # Chart D: Weekly Z4+Z5 (bottom-right)
+
+        # Row 3 Col 1: Daily Z4+Z5 (red bars)
+        fig.add_trace(
+            go.Bar(
+                x=last_28_dates,
+                y=daily_z4_z5,
+                marker_color='red',
+                name='Z4+Z5',
+                showlegend=False,
+                customdata=[format_time(v) for v in daily_z4_z5],
+                hovertemplate='<b>%{x}</b><br>Time: %{customdata}<extra></extra>'
+            ),
+            row=3, col=1
+        )
+
+        # Row 3 Col 2: Weekly Z4+Z5
         fig.add_trace(
             go.Bar(
                 x=last_52_weeks,
@@ -1402,37 +1475,40 @@ def get_zone_training_data():
                 customdata=[format_time(v) for v in weekly_z4_z5_values],
                 hovertemplate='<b>%{x}</b><br>Time: %{customdata}<extra></extra>'
             ),
-            row=2, col=2
+            row=3, col=2
         )
         
-        # Update axes labels
-        fig.update_xaxes(title_text="Date", row=1, col=1, tickangle=-45)
-        fig.update_xaxes(title_text="Date", row=1, col=2, tickangle=-45)
-        fig.update_xaxes(title_text="Week", row=2, col=1, tickangle=-45)
-        fig.update_xaxes(title_text="Week", row=2, col=2, tickangle=-45)
+        # Update x-axes labels: left col (daily) uses "Date", right col (weekly) uses "Week"
+        for row in [1, 2, 3]:
+            fig.update_xaxes(title_text="Date", row=row, col=1, tickangle=-45)
+            fig.update_xaxes(title_text="Week", row=row, col=2, tickangle=-45)
         
         # Calculate max values for appropriate tick spacing
-        max_daily = max(max(daily_z2) if daily_z2 else [0], max(daily_z4_z5) if daily_z4_z5 else [0])
-        max_weekly = max(max(weekly_z2_values) if weekly_z2_values else [0], 
-                         max(weekly_z4_z5_values) if weekly_z4_z5_values else [0])
+        max_daily = max(
+            max(daily_z1) if daily_z1 else 0,
+            max(daily_z2) if daily_z2 else 0,
+            max(daily_z4_z5) if daily_z4_z5 else 0
+        )
+        max_weekly = max(
+            max(weekly_z1_values) if weekly_z1_values else 0,
+            max(weekly_z2_values) if weekly_z2_values else 0,
+            max(weekly_z4_z5_values) if weekly_z4_z5_values else 0
+        )
         
-        # Generate tick values and formatted labels for daily charts (every 30 min)
+        # Generate tick values and formatted labels
         daily_tick_vals = list(range(0, int(max_daily) + 60, 30))
         daily_tick_text = [format_time(v) for v in daily_tick_vals]
-        
-        # Generate tick values and formatted labels for weekly charts (every 60 min)
         weekly_tick_vals = list(range(0, int(max_weekly) + 120, 60))
         weekly_tick_text = [format_time(v) for v in weekly_tick_vals]
-        
-        # Update Y-axes with formatted time labels
-        fig.update_yaxes(title_text="Time", tickvals=daily_tick_vals, ticktext=daily_tick_text, row=1, col=1)
-        fig.update_yaxes(title_text="Time", tickvals=daily_tick_vals, ticktext=daily_tick_text, row=1, col=2)
-        fig.update_yaxes(title_text="Time", tickvals=weekly_tick_vals, ticktext=weekly_tick_text, row=2, col=1)
-        fig.update_yaxes(title_text="Time", tickvals=weekly_tick_vals, ticktext=weekly_tick_text, row=2, col=2)
+
+        # Apply Y-axes for all rows
+        for row in [1, 2, 3]:
+            fig.update_yaxes(title_text="Time", tickvals=daily_tick_vals, ticktext=daily_tick_text, row=row, col=1)
+            fig.update_yaxes(title_text="Time", tickvals=weekly_tick_vals, ticktext=weekly_tick_text, row=row, col=2)
         
         # Update layout
         fig.update_layout(
-            height=800,
+            height=1100,
             showlegend=False,
             title_text="Zone Training Analysis",
             title_x=0.5,

@@ -71,11 +71,18 @@ class CacheManager:
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS zone_training_cache (
                     date TEXT PRIMARY KEY,
+                    z1_minutes REAL NOT NULL,
                     z2_minutes REAL NOT NULL,
                     z4_z5_minutes REAL NOT NULL,
                     cached_at TEXT NOT NULL
                 )
             ''')
+
+            # Migration: add z1_minutes column if it does not yet exist (older DBs)
+            try:
+                cursor.execute('ALTER TABLE zone_training_cache ADD COLUMN z1_minutes REAL')
+            except Exception:
+                pass  # column already exists
 
             # Create index on cached_at for efficient cleanup
             cursor.execute('''
@@ -299,30 +306,37 @@ class CacheManager:
             date_str: Date string in 'YYYY-MM-DD' format
 
         Returns:
-            Dict with keys 'z2_minutes' and 'z4_z5_minutes', or None on miss
+            Dict with keys 'z1_minutes', 'z2_minutes' and 'z4_z5_minutes', or None on miss.
+            Returns None for rows that were cached before Z1 tracking was added (z1_minutes IS NULL).
         """
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute(
-                'SELECT z2_minutes, z4_z5_minutes FROM zone_training_cache WHERE date = ?',
+                'SELECT z1_minutes, z2_minutes, z4_z5_minutes FROM zone_training_cache WHERE date = ?',
                 (date_str,)
             )
             result = cursor.fetchone()
 
         if result:
+            z1, z2, z4_z5 = result
+            # Treat old rows that pre-date Z1 tracking as a cache miss so they get recomputed
+            if z1 is None:
+                logger.debug(f"Zone training cache STALE (no z1) for {date_str}")
+                return None
             logger.debug(f"Zone training cache HIT for {date_str}")
-            return {'z2_minutes': result[0], 'z4_z5_minutes': result[1]}
+            return {'z1_minutes': z1, 'z2_minutes': z2, 'z4_z5_minutes': z4_z5}
 
         logger.debug(f"Zone training cache MISS for {date_str}")
         return None
 
-    def set_zone_training_day(self, date_str: str, z2_minutes: float, z4_z5_minutes: float) -> None:
+    def set_zone_training_day(self, date_str: str, z1_minutes: float, z2_minutes: float, z4_z5_minutes: float) -> None:
         """
         Cache pre-computed zone training minutes for a specific date.
         Historical data does not change, so no expiry is applied.
 
         Args:
             date_str: Date string in 'YYYY-MM-DD' format
+            z1_minutes: Minutes spent in Zone 1 for that day
             z2_minutes: Minutes spent in Zone 2 for that day
             z4_z5_minutes: Minutes spent in Zone 4+5 for that day
         """
@@ -330,11 +344,11 @@ class CacheManager:
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute('''
-                INSERT OR REPLACE INTO zone_training_cache (date, z2_minutes, z4_z5_minutes, cached_at)
-                VALUES (?, ?, ?, ?)
-            ''', (date_str, z2_minutes, z4_z5_minutes, cached_at))
+                INSERT OR REPLACE INTO zone_training_cache (date, z1_minutes, z2_minutes, z4_z5_minutes, cached_at)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (date_str, z1_minutes, z2_minutes, z4_z5_minutes, cached_at))
             conn.commit()
-        logger.debug(f"Cached zone training for {date_str} (Z2={z2_minutes:.1f}m, Z4+Z5={z4_z5_minutes:.1f}m)")
+        logger.debug(f"Cached zone training for {date_str} (Z1={z1_minutes:.1f}m, Z2={z2_minutes:.1f}m, Z4+Z5={z4_z5_minutes:.1f}m)")
 
     def _delete_heart_rate_data(self, date: datetime) -> None:
         """Delete heart rate data for a specific date from both database and memory"""
