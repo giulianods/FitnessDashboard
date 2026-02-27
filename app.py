@@ -1201,9 +1201,26 @@ def get_zone_training_data():
             'Z5': (max_hr * 0.90, max_hr * 1.00, 'Maximum'),
         }
         
+        # Use zone training cache for historical days (anything before today).
+        # Today's data is always recomputed so the current day stays up to date.
+        today_str = end_date.strftime('%Y-%m-%d')
+        zone_cache = client.cache  # CacheManager instance (may be None if caching disabled)
+
         # Calculate zone times per day
         daily_zone_times = {}
         for date_str in sorted(weeks_data.keys()):
+            # Try cache for historical dates
+            if zone_cache is not None and date_str < today_str:
+                cached = zone_cache.get_zone_training_day(date_str)
+                if cached is not None:
+                    # Reconstruct the minimal dict expected by downstream code
+                    daily_zone_times[date_str] = {
+                        'Z2': cached['z2_minutes'],
+                        'Z4': cached['z4_z5_minutes'],
+                        'Z5': 0.0,
+                    }
+                    continue
+
             entry = weeks_data[date_str]
             
             # Handle both old format (list) and new format (dict)
@@ -1242,6 +1259,14 @@ def get_zone_training_data():
                         zone_times[zone] = 0
                 
                 daily_zone_times[date_str] = zone_times
+
+                # Persist computed values for historical days so future requests skip recomputation
+                if zone_cache is not None and date_str < today_str:
+                    zone_cache.set_zone_training_day(
+                        date_str,
+                        zone_times['Z2'],
+                        zone_times['Z4'] + zone_times['Z5']
+                    )
         
         # Prepare data for charts
         # Last 28 days for daily charts (or fewer if less data available)

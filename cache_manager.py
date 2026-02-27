@@ -67,6 +67,16 @@ class CacheManager:
                 )
             ''')
             
+            # Create zone_training_cache table (stores pre-computed daily zone minutes)
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS zone_training_cache (
+                    date TEXT PRIMARY KEY,
+                    z2_minutes REAL NOT NULL,
+                    z4_z5_minutes REAL NOT NULL,
+                    cached_at TEXT NOT NULL
+                )
+            ''')
+
             # Create index on cached_at for efficient cleanup
             cursor.execute('''
                 CREATE INDEX IF NOT EXISTS idx_hr_cached_at 
@@ -281,6 +291,51 @@ class CacheManager:
         self._memory_cache['hrv'][date_str] = (value, cached_at)
         logger.debug(f"Cached HRV data for {date_str} (value: {value})")
     
+    def get_zone_training_day(self, date_str: str) -> Optional[Dict]:
+        """
+        Get cached zone training minutes for a specific date.
+
+        Args:
+            date_str: Date string in 'YYYY-MM-DD' format
+
+        Returns:
+            Dict with keys 'z2_minutes' and 'z4_z5_minutes', or None on miss
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                'SELECT z2_minutes, z4_z5_minutes FROM zone_training_cache WHERE date = ?',
+                (date_str,)
+            )
+            result = cursor.fetchone()
+
+        if result:
+            logger.debug(f"Zone training cache HIT for {date_str}")
+            return {'z2_minutes': result[0], 'z4_z5_minutes': result[1]}
+
+        logger.debug(f"Zone training cache MISS for {date_str}")
+        return None
+
+    def set_zone_training_day(self, date_str: str, z2_minutes: float, z4_z5_minutes: float) -> None:
+        """
+        Cache pre-computed zone training minutes for a specific date.
+        Historical data does not change, so no expiry is applied.
+
+        Args:
+            date_str: Date string in 'YYYY-MM-DD' format
+            z2_minutes: Minutes spent in Zone 2 for that day
+            z4_z5_minutes: Minutes spent in Zone 4+5 for that day
+        """
+        cached_at = datetime.now().isoformat()
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT OR REPLACE INTO zone_training_cache (date, z2_minutes, z4_z5_minutes, cached_at)
+                VALUES (?, ?, ?, ?)
+            ''', (date_str, z2_minutes, z4_z5_minutes, cached_at))
+            conn.commit()
+        logger.debug(f"Cached zone training for {date_str} (Z2={z2_minutes:.1f}m, Z4+Z5={z4_z5_minutes:.1f}m)")
+
     def _delete_heart_rate_data(self, date: datetime) -> None:
         """Delete heart rate data for a specific date from both database and memory"""
         date_str = date.strftime('%Y-%m-%d')
@@ -407,6 +462,7 @@ class CacheManager:
             
             cursor.execute('DELETE FROM heart_rate_data')
             cursor.execute('DELETE FROM hrv_data')
+            cursor.execute('DELETE FROM zone_training_cache')
             
             conn.commit()
         
