@@ -4,6 +4,7 @@ Tests for zone training cache methods in CacheManager
 import shutil
 import sqlite3
 import tempfile
+from datetime import datetime
 from cache_manager import CacheManager
 
 
@@ -153,5 +154,19 @@ def test_zone_training_cache_all_zones_stored():
         assert result['z2_minutes'] == 100.0
         assert result['z3_minutes'] == 60.0
         assert result['z4_z5_minutes'] == 80.0
+    finally:
+        shutil.rmtree(temp_dir)
+
+
+def test_zone_training_cache_skips_today():
+    """set_zone_training_day must not persist today's date (data still accumulating)"""
+    temp_dir = tempfile.mkdtemp()
+    try:
+        cache = CacheManager(cache_dir=temp_dir)
+        today = datetime.now().strftime('%Y-%m-%d')
+        _set(cache, today, z_neg1=100.0, z0=50.0, z1=30.0, z2=20.0, z3=10.0, z4_z5=5.0)
+
+        result = cache.get_zone_training_day(today)
+        assert result is None, "Today's zone data must not be cached"
     finally:
         shutil.rmtree(temp_dir)

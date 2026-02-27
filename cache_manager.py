@@ -190,7 +190,14 @@ class CacheManager:
             data: List of heart rate data points, or None if no data available
         """
         date_str = date.strftime('%Y-%m-%d')
-        cached_at = datetime.now().isoformat()
+        now = datetime.now()
+
+        # Do not cache today's data – it is still being accumulated
+        if date.date() == now.date():
+            logger.debug(f"Skipping cache write for today ({date_str}) – data may be incomplete")
+            return
+
+        cached_at = now.isoformat()
         
         # Handle None values (no data available for this date)
         if data is None:
@@ -285,7 +292,14 @@ class CacheManager:
             value: HRV value (can be None)
         """
         date_str = date.strftime('%Y-%m-%d')
-        cached_at = datetime.now().isoformat()
+        now = datetime.now()
+
+        # Do not cache today's data – it is still being accumulated
+        if date.date() == now.date():
+            logger.debug(f"Skipping cache write for today ({date_str}) – data may be incomplete")
+            return
+
+        cached_at = now.isoformat()
         
         # Store in database (persistent)
         with sqlite3.connect(self.db_path) as conn:
@@ -365,7 +379,13 @@ class CacheManager:
             z3_minutes: Minutes spent in Zone 3 (Moderate)
             z4_z5_minutes: Minutes spent in Zone 4+5 (Hard/Maximum)
         """
-        cached_at = datetime.now().isoformat()
+        # Do not cache today's data – it is still being accumulated
+        now = datetime.now()
+        if date_str == now.strftime('%Y-%m-%d'):
+            logger.debug(f"Skipping cache write for today ({date_str}) – data may be incomplete")
+            return
+
+        cached_at = now.isoformat()
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute('''
