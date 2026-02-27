@@ -27,14 +27,15 @@ WAKING_HOURS_START = 6  # Start of waking hours (6:00 AM)
 WAKING_HOURS_END = 22  # End of waking hours (10:00 PM)
 
 # Zone colour palette – single source of truth for all bar charts
+# Rainbow progression: neutral → violet → blue → green → yellow → orange → red
 ZONE_COLORS = {
-    'Z-1': '#B0B0B0',  # discreet mid-gray
-    'Z0':  '#9B8EC4',  # muted violet
-    'Z1':  '#87CEEB',  # sky blue (light warm-up)
-    'Z2':  '#5EBA58',  # pleasant green (slightly warm)
-    'Z3':  '#F4A428',  # amber / orange-yellow
-    'Z4':  '#E05252',  # moderate red
-    'Z5':  '#8B1A1A',  # dark intense red
+    'Z-1': '#9E9E9E',  # neutral gray
+    'Z0':  '#7C4DFF',  # bright violet
+    'Z1':  '#42A5F5',  # bright blue
+    'Z2':  '#66BB6A',  # bright green
+    'Z3':  '#FDD835',  # bright yellow
+    'Z4':  '#FB8C00',  # bright orange
+    'Z5':  '#E53935',  # bright red
 }
 
 def format_time(minutes):
