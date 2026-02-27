@@ -1650,7 +1650,7 @@ def get_zone_calendar_data():
             vertical_spacing=0.08
         )
 
-        # Add stacked bar traces; only add to legend for first row
+        # Add grouped bar traces (one trace per zone); only show legend entries for the first row
         for row_idx, w_days in enumerate(weeks, start=1):
             x_labels = []
             for day in w_days:
@@ -1684,21 +1684,12 @@ def get_zone_calendar_data():
                     row=row_idx, col=1
                 )
 
-        # Global Y-axis: max waking hours in minutes
-        max_y = WAKING_HOURS_DURATION
-
         for row_idx in range(1, 6):
             fig.update_xaxes(tickangle=0, row=row_idx, col=1)
-            fig.update_yaxes(
-                title_text='Minutes',
-                range=[0, max_y],
-                tickvals=list(range(0, max_y + 1, 120)),
-                ticktext=[format_time(v) for v in range(0, max_y + 1, 120)],
-                row=row_idx, col=1
-            )
+            fig.update_yaxes(title_text='Minutes', row=row_idx, col=1)
 
         fig.update_layout(
-            barmode='stack',
+            barmode='group',
             height=1400,
             showlegend=True,
             legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1),
