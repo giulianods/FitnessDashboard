@@ -297,6 +297,9 @@
         <div class="menu-item" onclick="switchView('zone-calendar', event)" title="Zone Calendar">
             🗓️
         </div>
+        <div class="menu-item" onclick="switchView('hr-histogram', event)" title="Daily HR Histograms">
+            📊
+        </div>
     </div>
     
     <div class="container">
@@ -429,6 +432,18 @@
                 </div>
             </div>
         </div>
+
+        <!-- HR Histogram View (7th dashboard) -->
+        <div id="hr-histogram-view" class="view">
+            <div class="chart-container">
+                <div id="hr-histogram-chart">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <p>Loading daily HR histograms...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
     
     <script>
@@ -482,6 +497,9 @@
             } else if (view === 'zone-calendar') {
                 document.getElementById('zone-calendar-view').classList.add('active');
                 loadZoneCalendarData();
+            } else if (view === 'hr-histogram') {
+                document.getElementById('hr-histogram-view').classList.add('active');
+                loadHrHistogramData();
             }
         }
         
@@ -979,6 +997,38 @@
                     chartDiv.innerHTML = `
                         <div class="loading">
                             <p style="color: #e74c3c;">Error loading zone calendar data</p>
+                            <p style="font-size: 14px; color: #666;">${error.message}</p>
+                        </div>
+                    `;
+                    console.error('Error:', error);
+                });
+        }
+        function loadHrHistogramData() {
+            const chartDiv = document.getElementById('hr-histogram-chart');
+            chartDiv.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading daily HR histograms...</p></div>';
+
+            fetch('/get_hr_histogram_data')
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(err => {
+                            throw new Error(err.error || 'Failed to load data');
+                        });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    const chartData = JSON.parse(data.chart);
+                    chartDiv.innerHTML = '';
+                    Plotly.newPlot('hr-histogram-chart', chartData.data, chartData.layout, {
+                        responsive: true,
+                        displayModeBar: true,
+                        displaylogo: false
+                    });
+                })
+                .catch(error => {
+                    chartDiv.innerHTML = `
+                        <div class="loading">
+                            <p style="color: #e74c3c;">Error loading HR histogram data</p>
                             <p style="font-size: 14px; color: #666;">${error.message}</p>
                         </div>
                     `;

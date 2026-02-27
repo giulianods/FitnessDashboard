@@ -35,6 +35,31 @@ def format_time(minutes):
     else:
         return f"{mins}m"
 
+
+def _compute_bin_colors(bin_centers, max_hr):
+    """Return a list of RGB colour strings for HR histogram bins using the
+    project-standard three-tier gradient:
+      • below Z0 (< 50% max HR): dark violet
+      • Z0 → Z1 boundary (50–60% max HR): violet → green
+      • Z1 → max (60–100% max HR): green → dark red
+    """
+    z0_threshold = max_hr * 0.5
+    green_point = max_hr * 0.6
+    colors = []
+    for bc in bin_centers:
+        if bc < z0_threshold:
+            position = bc / z0_threshold if z0_threshold > 0 else 0
+            hue, sat, val = 270, 0.7, 0.3 + 0.2 * position
+        elif bc < green_point:
+            position = (bc - z0_threshold) / (green_point - z0_threshold) if green_point > z0_threshold else 0
+            hue, sat, val = 270 - 150 * position, 0.8, 0.9
+        else:
+            position = (bc - green_point) / (max_hr - green_point) if max_hr > green_point else 0
+            hue, sat, val = 120 * (1 - position), 0.8, 0.9 - 0.3 * position
+        rgb = tuple(int(x * 255) for x in colorsys.hsv_to_rgb(hue / 360, sat, val))
+        colors.append(f'rgb({rgb[0]},{rgb[1]},{rgb[2]})')
+    return colors
+
 # Global Garmin client (will be initialized on first request)
 garmin_client = None
 
@@ -193,37 +218,8 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
         bin_area = bin_width * len(waking_hours_hr)
         hist_density = hist_values / bin_area
         
-        # Calculate color for each bin with three-tier gradient:
-        # Below Z0 (50% max HR): Dark violet
-        # Z0 to Green Point (50-60% max HR): Violet to Green
-        # Green Point to Max (60-100% max HR): Green to Dark Red
-        z0_threshold = max_hr * 0.5  # Z0 is 50% of max HR
-        green_point = max_hr * 0.6  # Green at 60% of max HR (~108 bpm for max HR 180)
-        bin_colors = []
-        for bin_center in bin_centers:
-            if bin_center < z0_threshold:
-                # Below Z0: Dark violet (night colors) - darker for lower HR
-                position = bin_center / z0_threshold if z0_threshold > 0 else 0
-                hue = 270  # Violet hue
-                sat = 0.7
-                val = 0.3 + 0.2 * position  # 0.3 (darkest) to 0.5 (lighter)
-            elif bin_center < green_point:
-                # Z0 to Green Point: Violet (270°) to Green (120°)
-                position = (bin_center - z0_threshold) / (green_point - z0_threshold) if green_point > z0_threshold else 0
-                hue = 270 - (270 - 120) * position  # 270° → 120° (violet to green)
-                sat = 0.8
-                val = 0.9
-            else:
-                # Green Point to Max: Green (120°) to Dark Red (0°)
-                position = (bin_center - green_point) / (max_hr - green_point) if max_hr > green_point else 0
-                hue = 120 * (1 - position)  # 120° → 0° (green to red)
-                sat = 0.8
-                val = 0.9 - 0.3 * position  # Darker towards red (0.9 → 0.6)
-            
-            # Convert HSV to RGB
-            rgb = tuple(int(x * 255) for x in colorsys.hsv_to_rgb(hue/360, sat, val))
-            bin_colors.append(f'rgb({rgb[0]},{rgb[1]},{rgb[2]})')
-        
+        bin_colors = _compute_bin_colors(bin_centers, max_hr)
+
         # Add bar chart with gradient colors (using Bar instead of Histogram for color control)
         fig.add_trace(go.Bar(
             x=bin_centers,
@@ -724,37 +720,8 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
         bin_area = bin_width * len(all_waking_hrs)
         hist_density = hist_values / bin_area
         
-        # Calculate color for each bin with three-tier gradient:
-        # Below Z0 (50% max HR): Dark violet
-        # Z0 to Green Point (50-60% max HR): Violet to Green
-        # Green Point to Max (60-100% max HR): Green to Dark Red
-        z0_threshold = max_hr * 0.5  # Z0 is 50% of max HR
-        green_point = max_hr * 0.6  # Green at 60% of max HR (~108 bpm for max HR 180)
-        bin_colors = []
-        for bin_center in bin_centers:
-            if bin_center < z0_threshold:
-                # Below Z0: Dark violet (night colors) - darker for lower HR
-                position = bin_center / z0_threshold if z0_threshold > 0 else 0
-                hue = 270  # Violet hue
-                sat = 0.7
-                val = 0.3 + 0.2 * position  # 0.3 (darkest) to 0.5 (lighter)
-            elif bin_center < green_point:
-                # Z0 to Green Point: Violet (270°) to Green (120°)
-                position = (bin_center - z0_threshold) / (green_point - z0_threshold) if green_point > z0_threshold else 0
-                hue = 270 - (270 - 120) * position  # 270° → 120° (violet to green)
-                sat = 0.8
-                val = 0.9
-            else:
-                # Green Point to Max: Green (120°) to Dark Red (0°)
-                position = (bin_center - green_point) / (max_hr - green_point) if max_hr > green_point else 0
-                hue = 120 * (1 - position)  # 120° → 0° (green to red)
-                sat = 0.8
-                val = 0.9 - 0.3 * position  # Darker towards red (0.9 → 0.6)
-            
-            # Convert HSV to RGB
-            rgb = tuple(int(x * 255) for x in colorsys.hsv_to_rgb(hue/360, sat, val))
-            bin_colors.append(f'rgb({rgb[0]},{rgb[1]},{rgb[2]})')
-        
+        bin_colors = _compute_bin_colors(bin_centers, max_hr)
+
         # Add bar chart with gradient colors (using Bar instead of Histogram for color control)
         fig.add_trace(go.Bar(
             x=bin_centers,
@@ -1696,6 +1663,162 @@ def get_zone_calendar_data():
             title_text='Zone Calendar – Last 4 Weeks + Current',
             title_x=0.5,
             margin=dict(t=120, b=60, l=80, r=60)
+        )
+
+        chart_json = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
+        return jsonify({'chart': chart_json})
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/get_hr_histogram_data')
+def get_hr_histogram_data():
+    """7th dashboard: per-day HR distribution histograms (colored + lognormal fit).
+
+    Returns a 5-row × 7-col Plotly figure covering the same 5-week window as the
+    zone calendar (current ISO week + 4 prior).  Each cell shows the waking-hours
+    HR distribution for that day, coloured with the zone-gradient and overlaid with
+    a fitted lognormal curve.
+    """
+    try:
+        client = get_garmin_client()
+
+        today = datetime.now().date()
+        current_monday = today - timedelta(days=today.weekday())
+        window_start = current_monday - timedelta(weeks=4)
+        window_end = today
+
+        # Fetch HR data for the entire window
+        days_data = {}
+        current_date = datetime.combine(window_start, datetime.min.time())
+        end_datetime = datetime.combine(window_end, datetime.min.time())
+        while current_date <= end_datetime:
+            date_str = current_date.strftime('%Y-%m-%d')
+            hr_data = client.get_heart_rate_data(current_date)
+            if hr_data:
+                days_data[date_str] = hr_data
+            current_date += timedelta(days=1)
+
+        max_hr = DEFAULT_MAX_HR
+        nbins = 30  # fewer bins so small subplots remain readable
+
+        # Build 5-week row structure (oldest week first)
+        weeks = []
+        for w in range(4, -1, -1):
+            monday = current_monday - timedelta(weeks=w)
+            weeks.append([monday + timedelta(days=d) for d in range(7)])
+
+        day_names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
+        # Row titles (shown on y-axis side via subplot row labels)
+        week_row_titles = []
+        for w_days in weeks:
+            monday = w_days[0]
+            sunday = w_days[6]
+            week_row_titles.append(
+                f"Week of {monday.strftime('%b %d')} – {sunday.strftime('%b %d, %Y')}"
+            )
+
+        # Subplot titles: one per cell in row-major order (5 rows × 7 cols = 35)
+        subplot_titles = []
+        for w_days in weeks:
+            for day in w_days:
+                subplot_titles.append(
+                    f"{day_names[day.weekday()]} {day.strftime('%m/%d')}"
+                )
+
+        fig = make_subplots(
+            rows=5, cols=7,
+            subplot_titles=subplot_titles,
+            vertical_spacing=0.07,
+            horizontal_spacing=0.02,
+        )
+
+        for row_idx, w_days in enumerate(weeks, start=1):
+            for col_idx, day in enumerate(w_days, start=1):
+                d_str = day.strftime('%Y-%m-%d')
+                hr_data = days_data.get(d_str)
+                if not hr_data:
+                    continue
+
+                waking_hrs = [
+                    p['heart_rate'] for p in hr_data
+                    if WAKING_HOURS_START <= p['timestamp'].hour < WAKING_HOURS_END
+                ]
+                if not waking_hrs:
+                    continue
+
+                hist_values, bin_edges = np.histogram(waking_hrs, bins=nbins)
+                bin_centers = [
+                    (bin_edges[i] + bin_edges[i + 1]) / 2
+                    for i in range(len(bin_edges) - 1)
+                ]
+                bin_width = bin_edges[1] - bin_edges[0]
+                bin_area = bin_width * len(waking_hrs)
+                hist_density = (hist_values / bin_area).tolist()
+
+                bin_colors = _compute_bin_colors(bin_centers, max_hr)
+
+                fig.add_trace(
+                    go.Bar(
+                        x=bin_centers,
+                        y=hist_density,
+                        width=float(bin_width * 0.95),
+                        marker=dict(color=bin_colors, line=dict(width=0)),
+                        showlegend=False,
+                        name=d_str,
+                        hovertemplate='<b>' + d_str + '</b><br>HR: %{x:.0f} bpm<br>Density: %{y:.4f}<extra></extra>',
+                    ),
+                    row=row_idx, col=col_idx,
+                )
+
+                # Lognormal fit
+                min_hr = min(waking_hrs)
+                hr_shifted = [hr - min_hr for hr in waking_hrs if hr > min_hr]
+                fit_range = max_hr - min_hr
+                if hr_shifted and fit_range > 0:
+                    shape, loc, scale = stats.lognorm.fit(hr_shifted, floc=0)
+                    x_fit_shifted = np.linspace(0, fit_range, 150)
+                    y_fit = stats.lognorm.pdf(x_fit_shifted, shape, loc, scale)
+                    x_fit = (x_fit_shifted + min_hr).tolist()
+
+                    fig.add_trace(
+                        go.Scatter(
+                            x=x_fit,
+                            y=y_fit.tolist(),
+                            mode='lines',
+                            line=dict(color='#FF6347', width=1.5),
+                            showlegend=False,
+                        ),
+                        row=row_idx, col=col_idx,
+                    )
+
+        # Uniform axes: hide tick labels to keep cells compact
+        for r in range(1, 6):
+            for c in range(1, 8):
+                fig.update_xaxes(
+                    range=[0, max_hr],
+                    showticklabels=False,
+                    showgrid=True,
+                    gridcolor='#E8E8E8',
+                    row=r, col=c,
+                )
+                fig.update_yaxes(
+                    showticklabels=False,
+                    showgrid=False,
+                    row=r, col=c,
+                )
+
+        fig.update_layout(
+            height=1400,
+            showlegend=False,
+            title_text='Daily HR Distributions – Last 4 Weeks + Current',
+            title_x=0.5,
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            margin=dict(t=100, b=60, l=40, r=40),
+            font=dict(family='Arial, sans-serif', size=10, color='#333'),
         )
 
         chart_json = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
