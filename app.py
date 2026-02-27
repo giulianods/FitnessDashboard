@@ -1301,7 +1301,7 @@ def get_zone_training_data():
                           f'Weekly Z2 Time ({weekly_title})',
                           f'Daily Z4+Z5 Time ({daily_title})',
                           f'Weekly Z4+Z5 Time ({weekly_title})'),
-            vertical_spacing=0.10,
+            vertical_spacing=0.15,
             horizontal_spacing=0.1
         )
         
@@ -1493,7 +1493,7 @@ def get_zone_training_data():
         
         # Update layout
         fig.update_layout(
-            height=1100,
+            height=1300,
             showlegend=False,
             title_text="Zone Training Analysis",
             title_x=0.5,
