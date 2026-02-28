@@ -51,23 +51,33 @@ def format_time(minutes):
 
 def _compute_bin_colors(bin_centers, max_hr):
     """Return a list of RGB colour strings for HR histogram bins using the
-    project-standard three-tier gradient:
-      • below Z0 (< 50% max HR): muted gray-violet (low saturation)
-      • Z0 → Z1 boundary (50–60% max HR): violet → green
-      • Z1 → max (60–100% max HR): green → dark red
+    project-standard four-segment gradient aligned with heart-rate zones:
+      • Z-1 (< 50% max HR):   muted gray-violet (low saturation)
+      • Z0  (50–60% max HR):  bright violet (hue 270°)
+      • Z1  (60–70% max HR):  blue → cyan, getting lighter toward Z2
+      • Z2+ (70–100% max HR): green → amber → dark red
     """
-    z0_threshold = max_hr * 0.5
-    green_point = max_hr * 0.6
+    z_m1_end = max_hr * 0.50   # Z-1 / Z0 boundary
+    z0_end   = max_hr * 0.60   # Z0  / Z1 boundary
+    z1_end   = max_hr * 0.70   # Z1  / Z2 boundary
     colors = []
     for bc in bin_centers:
-        if bc < z0_threshold:
-            position = bc / z0_threshold if z0_threshold > 0 else 0
+        if bc < z_m1_end:
+            # Z-1: muted gray-violet
+            position = bc / z_m1_end if z_m1_end > 0 else 0
             hue, sat, val = 270, 0.15, 0.5 + 0.2 * position
-        elif bc < green_point:
-            position = (bc - z0_threshold) / (green_point - z0_threshold) if green_point > z0_threshold else 0
-            hue, sat, val = 270 - 150 * position, 0.8, 0.9
+        elif bc < z0_end:
+            # Z0: bright violet
+            hue, sat, val = 270, 0.8, 0.8
+        elif bc < z1_end:
+            # Z1: blue (240°) → cyan (180°), getting lighter
+            position = (bc - z0_end) / (z1_end - z0_end) if z1_end > z0_end else 0
+            hue = 240 - 60 * position        # 240° → 180°
+            sat = 0.8
+            val = 0.70 + 0.25 * position     # 0.70 → 0.95 (lightens toward Z2)
         else:
-            position = (bc - green_point) / (max_hr - green_point) if max_hr > green_point else 0
+            # Z2+: green → amber → dark red
+            position = (bc - z1_end) / (max_hr - z1_end) if max_hr > z1_end else 0
             hue, sat, val = 120 * (1 - position), 0.8, 0.9 - 0.3 * position
         rgb = tuple(int(x * 255) for x in colorsys.hsv_to_rgb(hue / 360, sat, val))
         colors.append(f'rgb({rgb[0]},{rgb[1]},{rgb[2]})')
