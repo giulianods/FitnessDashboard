@@ -27,15 +27,16 @@ WAKING_HOURS_START = 6  # Start of waking hours (6:00 AM)
 WAKING_HOURS_END = 22  # End of waking hours (10:00 PM)
 
 # Zone colour palette – single source of truth for all bar charts
-# Rainbow progression: neutral → violet → blue → green → yellow → orange → red
+# Rainbow progression: neutral → violet → cyan → green → lime → amber → orange-red
+# Hues aligned with the HR histogram gradient (violet ~270° → orange-red ~15°)
 ZONE_COLORS = {
     'Z-1': '#9E9E9E',  # neutral gray
-    'Z0':  '#7C4DFF',  # bright violet
-    'Z1':  '#42A5F5',  # bright blue
-    'Z2':  '#66BB6A',  # bright green
-    'Z3':  '#FDD835',  # bright yellow
-    'Z4':  '#FB8C00',  # bright orange
-    'Z5':  '#E53935',  # bright red
+    'Z0':  '#7C4DFF',  # bright violet   (~270°)
+    'Z1':  '#00BCD4',  # bright cyan     (~188°)
+    'Z2':  '#4CAF50',  # bright green    (~123°)
+    'Z3':  '#CDDC39',  # bright lime     (~65°)
+    'Z4':  '#FFA000',  # amber           (~38°)
+    'Z5':  '#F4511E',  # deep orange-red (~16°)
 }
 
 def format_time(minutes):
@@ -51,7 +52,7 @@ def format_time(minutes):
 def _compute_bin_colors(bin_centers, max_hr):
     """Return a list of RGB colour strings for HR histogram bins using the
     project-standard three-tier gradient:
-      • below Z0 (< 50% max HR): dark violet
+      • below Z0 (< 50% max HR): muted gray-violet (low saturation)
       • Z0 → Z1 boundary (50–60% max HR): violet → green
       • Z1 → max (60–100% max HR): green → dark red
     """
@@ -61,7 +62,7 @@ def _compute_bin_colors(bin_centers, max_hr):
     for bc in bin_centers:
         if bc < z0_threshold:
             position = bc / z0_threshold if z0_threshold > 0 else 0
-            hue, sat, val = 270, 0.7, 0.3 + 0.2 * position
+            hue, sat, val = 270, 0.15, 0.5 + 0.2 * position
         elif bc < green_point:
             position = (bc - z0_threshold) / (green_point - z0_threshold) if green_point > z0_threshold else 0
             hue, sat, val = 270 - 150 * position, 0.8, 0.9
