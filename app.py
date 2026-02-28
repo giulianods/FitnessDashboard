@@ -50,35 +50,45 @@ def format_time(minutes):
 
 
 def _compute_bin_colors(bin_centers, max_hr):
-    """Return a list of RGB colour strings for HR histogram bins using the
-    project-standard four-segment gradient aligned with heart-rate zones:
-      • Z-1 (< 50% max HR):   muted gray-violet (low saturation)
-      • Z0  (50–60% max HR):  bright violet (hue 270°)
-      • Z1  (60–70% max HR):  blue → cyan, getting lighter toward Z2
-      • Z2+ (70–100% max HR): green → amber → dark red
+    """Return a list of RGB colour strings for HR histogram bins.
+
+    A single smooth gradient is produced by linearly interpolating between
+    control points keyed to heart-rate zone boundaries (as fractions of
+    max HR).  Saturation stays ≥ 0.70 everywhere so no bin looks grey.
+
+    Control points (hr_fraction, hue°, sat, val):
+      0.00 → deep violet  (270°, 0.70, 0.40)
+      0.50 → bright violet (270°, 0.90, 0.80)  ← Z0 start
+      0.60 → blue          (240°, 0.90, 0.75)  ← Z1 start
+      0.70 → light cyan    (185°, 0.85, 0.95)  ← Z2 start
+      0.80 → green         (120°, 0.90, 0.85)  ← Z3 start
+      0.90 → amber          (38°, 0.95, 0.95)  ← Z4 start
+      1.00 → deep red         (5°, 0.90, 0.70) ← Z5 end
     """
-    z_m1_end = max_hr * 0.50   # Z-1 / Z0 boundary
-    z0_end   = max_hr * 0.60   # Z0  / Z1 boundary
-    z1_end   = max_hr * 0.70   # Z1  / Z2 boundary
+    # (fraction_of_max_hr, hue, sat, val)
+    STOPS = [
+        (0.00, 270, 0.70, 0.40),
+        (0.50, 270, 0.90, 0.80),
+        (0.60, 240, 0.90, 0.75),
+        (0.70, 185, 0.85, 0.95),
+        (0.80, 120, 0.90, 0.85),
+        (0.90,  38, 0.95, 0.95),
+        (1.00,   5, 0.90, 0.70),
+    ]
     colors = []
     for bc in bin_centers:
-        if bc < z_m1_end:
-            # Z-1: muted gray-violet
-            position = bc / z_m1_end if z_m1_end > 0 else 0
-            hue, sat, val = 270, 0.15, 0.5 + 0.2 * position
-        elif bc < z0_end:
-            # Z0: bright violet
-            hue, sat, val = 270, 0.8, 0.8
-        elif bc < z1_end:
-            # Z1: blue (240°) → cyan (180°), getting lighter
-            position = (bc - z0_end) / (z1_end - z0_end) if z1_end > z0_end else 0
-            hue = 240 - 60 * position        # 240° → 180°
-            sat = 0.8
-            val = 0.70 + 0.25 * position     # 0.70 → 0.95 (lightens toward Z2)
-        else:
-            # Z2+: green → amber → dark red
-            position = (bc - z1_end) / (max_hr - z1_end) if max_hr > z1_end else 0
-            hue, sat, val = 120 * (1 - position), 0.8, 0.9 - 0.3 * position
+        frac = (bc / max_hr) if max_hr > 0 else 0
+        frac = max(0.0, min(1.0, frac))
+        # Find bracketing stops
+        for i in range(len(STOPS) - 1):
+            f0, h0, s0, v0 = STOPS[i]
+            f1, h1, s1, v1 = STOPS[i + 1]
+            if frac < f1 or i == len(STOPS) - 2:
+                t = (frac - f0) / (f1 - f0) if f1 > f0 else 0
+                hue = h0 + t * (h1 - h0)
+                sat = s0 + t * (s1 - s0)
+                val = v0 + t * (v1 - v0)
+                break
         rgb = tuple(int(x * 255) for x in colorsys.hsv_to_rgb(hue / 360, sat, val))
         colors.append(f'rgb({rgb[0]},{rgb[1]},{rgb[2]})')
     return colors
