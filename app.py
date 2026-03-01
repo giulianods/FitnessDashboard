@@ -59,19 +59,19 @@ def _compute_bin_colors(bin_centers, max_hr):
     Control points (hr_fraction, hue°, sat, val):
       0.00 → deep violet  (270°, 0.70, 0.40)
       0.50 → bright violet (270°, 0.90, 0.80)  ← Z0 start
-      0.60 → blue          (240°, 0.90, 0.75)  ← Z1 start
-      0.70 → light cyan    (185°, 0.85, 0.95)  ← Z2 start
-      0.80 → green         (120°, 0.90, 0.85)  ← Z3 start
-      0.90 → amber          (38°, 0.95, 0.95)  ← Z4 start
+      0.60 → cyan          (188°, 0.90, 0.85)  ← Z1 end / Z2 start
+      0.70 → green         (120°, 0.90, 0.85)  ← Z2 end / Z3 start
+      0.80 → lime           (65°, 0.90, 0.85)  ← Z3 end / Z4 start
+      0.90 → amber          (38°, 0.95, 0.95)  ← Z4 end / Z5 start
       1.00 → deep red         (5°, 0.90, 0.70) ← Z5 end
     """
     # (fraction_of_max_hr, hue, sat, val)
     STOPS = [
         (0.00, 270, 0.70, 0.40),
         (0.50, 270, 0.90, 0.80),
-        (0.60, 240, 0.90, 0.75),
-        (0.70, 185, 0.85, 0.95),
-        (0.80, 120, 0.90, 0.85),
+        (0.60, 188, 0.90, 0.85),
+        (0.70, 120, 0.90, 0.85),
+        (0.80,  65, 0.90, 0.85),
         (0.90,  38, 0.95, 0.95),
         (1.00,   5, 0.90, 0.70),
     ]
