@@ -1353,11 +1353,7 @@ def get_zone_training_data():
             ),
             row=1, col=1
         )
-        daily_z1_ma = [
-            sum((v or 0) for v in daily_z1[i - ma_period + 1:i + 1]) / ma_period
-            if i >= ma_period - 1 else None
-            for i in range(len(daily_z1))
-        ]
+        daily_z1_ma = calculate_moving_average(daily_z1, ma_period)
         fig.add_trace(
             go.Scatter(
                 x=last_28_dates,
@@ -1385,11 +1381,7 @@ def get_zone_training_data():
             ),
             row=1, col=2
         )
-        weekly_z1_ma = [
-            sum((v or 0) for v in weekly_z1_values[i - ma_period + 1:i + 1]) / ma_period
-            if i >= ma_period - 1 else None
-            for i in range(len(weekly_z1_values))
-        ]
+        weekly_z1_ma = calculate_moving_average(weekly_z1_values, ma_period)
         fig.add_trace(
             go.Scatter(
                 x=last_52_weeks,
@@ -1417,11 +1409,7 @@ def get_zone_training_data():
             ),
             row=2, col=1
         )
-        daily_z2_ma = [
-            sum((v or 0) for v in daily_z2[i - ma_period + 1:i + 1]) / ma_period
-            if i >= ma_period - 1 else None
-            for i in range(len(daily_z2))
-        ]
+        daily_z2_ma = calculate_moving_average(daily_z2, ma_period)
         fig.add_trace(
             go.Scatter(
                 x=last_28_dates,
@@ -1449,11 +1437,7 @@ def get_zone_training_data():
             ),
             row=2, col=2
         )
-        weekly_z2_ma = [
-            sum((v or 0) for v in weekly_z2_values[i - ma_period + 1:i + 1]) / ma_period
-            if i >= ma_period - 1 else None
-            for i in range(len(weekly_z2_values))
-        ]
+        weekly_z2_ma = calculate_moving_average(weekly_z2_values, ma_period)
         fig.add_trace(
             go.Scatter(
                 x=last_52_weeks,
@@ -1481,6 +1465,20 @@ def get_zone_training_data():
             ),
             row=3, col=1
         )
+        daily_z4_z5_ma = calculate_moving_average(daily_z4_z5, ma_period)
+        fig.add_trace(
+            go.Scatter(
+                x=last_28_dates,
+                y=daily_z4_z5_ma,
+                mode='lines',
+                line=dict(color='darkred', width=2, dash='solid'),
+                name='10-day MA',
+                showlegend=False,
+                customdata=[format_time(v) if v is not None else '' for v in daily_z4_z5_ma],
+                hovertemplate='<b>%{x}</b><br>10-day MA: %{customdata}<extra></extra>'
+            ),
+            row=3, col=1
+        )
 
         # Row 3 Col 2: Weekly Z4+Z5 (Z4 color used – Z4 dominates hard/max effort time)
         fig.add_trace(
@@ -1492,6 +1490,20 @@ def get_zone_training_data():
                 showlegend=False,
                 customdata=[format_time(v) for v in weekly_z4_z5_values],
                 hovertemplate='<b>%{x}</b><br>Time: %{customdata}<extra></extra>'
+            ),
+            row=3, col=2
+        )
+        weekly_z4_z5_ma = calculate_moving_average(weekly_z4_z5_values, ma_period)
+        fig.add_trace(
+            go.Scatter(
+                x=last_52_weeks,
+                y=weekly_z4_z5_ma,
+                mode='lines',
+                line=dict(color='darkred', width=2, dash='solid'),
+                name='10-week MA',
+                showlegend=False,
+                customdata=[format_time(v) if v is not None else '' for v in weekly_z4_z5_ma],
+                hovertemplate='<b>%{x}</b><br>10-week MA: %{customdata}<extra></extra>'
             ),
             row=3, col=2
         )
