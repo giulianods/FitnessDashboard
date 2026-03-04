@@ -26,6 +26,19 @@ WAKING_HOURS_DURATION = 16 * 60  # Duration of waking hours in minutes (6:00-22:
 WAKING_HOURS_START = 6  # Start of waking hours (6:00 AM)
 WAKING_HOURS_END = 22  # End of waking hours (10:00 PM)
 
+# Zone colour palette – single source of truth for all bar charts
+# Rainbow progression: neutral → violet → cyan → green → lime → amber → orange-red
+# Hues aligned with the HR histogram gradient (violet ~270° → orange-red ~15°)
+ZONE_COLORS = {
+    'Z-1': '#9E9E9E',  # neutral gray
+    'Z0':  '#7C4DFF',  # bright violet   (~270°)
+    'Z1':  '#00BCD4',  # bright cyan     (~188°)
+    'Z2':  '#4CAF50',  # bright green    (~123°)
+    'Z3':  '#CDDC39',  # bright lime     (~65°)
+    'Z4':  '#FFA000',  # amber           (~38°)
+    'Z5':  '#F4511E',  # deep orange-red (~16°)
+}
+
 def format_time(minutes):
     """Format time in minutes to human-readable hours and minutes string."""
     hours = int(minutes // 60)
@@ -34,6 +47,51 @@ def format_time(minutes):
         return f"{hours}h {mins}m"
     else:
         return f"{mins}m"
+
+
+def _compute_bin_colors(bin_centers, max_hr):
+    """Return a list of RGB colour strings for HR histogram bins.
+
+    A single smooth gradient is produced by linearly interpolating between
+    control points keyed to heart-rate zone boundaries (as fractions of
+    max HR).  Saturation stays ≥ 0.70 everywhere so no bin looks grey.
+
+    Control points (hr_fraction, hue°, sat, val):
+      0.00 → deep violet  (270°, 0.70, 0.40)
+      0.50 → cyan         (188°, 0.90, 0.85)  ← Z1 start  (cyan → green across Z1)
+      0.60 → green        (120°, 0.90, 0.85)  ← Z2 start  (already green)
+      0.70 → lime          (65°, 0.90, 0.85)  ← Z3 start
+      0.80 → amber         (38°, 0.95, 0.95)  ← Z4 start
+      0.90 → orange        (16°, 0.95, 0.90)  ← Z5 start
+      1.00 → deep red        (5°, 0.90, 0.70) ← Z5 end
+    """
+    # (fraction_of_max_hr, hue, sat, val)
+    STOPS = [
+        (0.00, 270, 0.70, 0.40),
+        (0.50, 188, 0.90, 0.85),
+        (0.60, 120, 0.90, 0.85),
+        (0.70,  65, 0.90, 0.85),
+        (0.80,  38, 0.95, 0.95),
+        (0.90,  16, 0.95, 0.90),
+        (1.00,   5, 0.90, 0.70),
+    ]
+    colors = []
+    for bc in bin_centers:
+        frac = (bc / max_hr) if max_hr > 0 else 0
+        frac = max(0.0, min(1.0, frac))
+        # Find bracketing stops
+        for i in range(len(STOPS) - 1):
+            f0, h0, s0, v0 = STOPS[i]
+            f1, h1, s1, v1 = STOPS[i + 1]
+            if frac < f1 or i == len(STOPS) - 2:
+                t = (frac - f0) / (f1 - f0) if f1 > f0 else 0
+                hue = h0 + t * (h1 - h0)
+                sat = s0 + t * (s1 - s0)
+                val = v0 + t * (v1 - v0)
+                break
+        rgb = tuple(int(x * 255) for x in colorsys.hsv_to_rgb(hue / 360, sat, val))
+        colors.append(f'rgb({rgb[0]},{rgb[1]},{rgb[2]})')
+    return colors
 
 # Global Garmin client (will be initialized on first request)
 garmin_client = None
@@ -71,10 +129,11 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
     date_obj = data[0]['timestamp']
     date_str = date_obj.strftime('%A, %b %d, %Y')  # e.g., "Friday, Jan 24, 2026"
     
-    # Garmin HR Zones (Z0-Z5) based on max HR
-    # Z0 is below 50%, Z1-Z5 are the training zones
+    # Garmin HR Zones (Z-1 to Z5) based on max HR
+    # Z-1 is below 40%, Z0 is 40-50%, Z1-Z5 are the training zones
     garmin_zones = {
-        'Z0': (0, max_hr * 0.50, 'Rest'),  # Zone 0: <50%
+        'Z-1': (0, max_hr * 0.40, 'Rest'),  # Zone -1: <40%
+        'Z0': (max_hr * 0.40, max_hr * 0.50, 'Moving'),  # Zone 0: 40-50%
         'Z1': (max_hr * 0.50, max_hr * 0.60, 'Very Light'),  # Zone 1: 50-60%
         'Z2': (max_hr * 0.60, max_hr * 0.70, 'Light'),  # Zone 2: 60-70%
         'Z3': (max_hr * 0.70, max_hr * 0.80, 'Moderate'),  # Zone 3: 70-80%
@@ -141,10 +200,10 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
     
     # Add horizontal zone lines AFTER the trace so they appear on top
     for idx, (zone_name, (lower, upper, desc)) in enumerate(garmin_zones.items()):
-        # Skip Z0 (rest zone) from being drawn as it starts at 0
-        if zone_name == 'Z0':
+        # Skip Z-1 (below rest zone) from being drawn as it starts at 0
+        if zone_name == 'Z-1':
             continue
-        # Add horizontal line at the lower boundary of each zone (except Z0)
+        # Add horizontal line at the lower boundary of each zone (except Z-1)
         fig.add_hline(
             y=lower,
             line_dash="solid",  # Solid for better visibility
@@ -161,8 +220,8 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
     zone_names = list(garmin_zones.keys())
     zone_time_values = [zone_times[z] for z in garmin_zones.keys()]
     zone_labels = [f"{z} - {garmin_zones[z][2]}" for z in garmin_zones.keys()]
-    # Standardized zone colors: Z0=grey, Z1=light blue, Z2=green, Z3=orange, Z4=red, Z5=dark red
-    zone_colors_bar = ['#808080', '#87CEEB', '#00FF00', '#FFA500', '#FF0000', '#8B0000']
+    # Standardized zone colors: Z-1=gray, Z0=violet, Z1=sky-blue, Z2=green, Z3=amber, Z4=red, Z5=dark-red
+    zone_colors_bar = [ZONE_COLORS[z] for z in ['Z-1', 'Z0', 'Z1', 'Z2', 'Z3', 'Z4', 'Z5']]
     
     fig.add_trace(go.Bar(
         y=zone_labels,
@@ -192,42 +251,14 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
         bin_area = bin_width * len(waking_hours_hr)
         hist_density = hist_values / bin_area
         
-        # Calculate color for each bin with three-tier gradient:
-        # Below Z0 (50% max HR): Dark violet
-        # Z0 to Green Point (50-60% max HR): Violet to Green
-        # Green Point to Max (60-100% max HR): Green to Dark Red
-        z0_threshold = max_hr * 0.5  # Z0 is 50% of max HR
-        green_point = max_hr * 0.6  # Green at 60% of max HR (~108 bpm for max HR 180)
-        bin_colors = []
-        for bin_center in bin_centers:
-            if bin_center < z0_threshold:
-                # Below Z0: Dark violet (night colors) - darker for lower HR
-                position = bin_center / z0_threshold if z0_threshold > 0 else 0
-                hue = 270  # Violet hue
-                sat = 0.7
-                val = 0.3 + 0.2 * position  # 0.3 (darkest) to 0.5 (lighter)
-            elif bin_center < green_point:
-                # Z0 to Green Point: Violet (270°) to Green (120°)
-                position = (bin_center - z0_threshold) / (green_point - z0_threshold) if green_point > z0_threshold else 0
-                hue = 270 - (270 - 120) * position  # 270° → 120° (violet to green)
-                sat = 0.8
-                val = 0.9
-            else:
-                # Green Point to Max: Green (120°) to Dark Red (0°)
-                position = (bin_center - green_point) / (max_hr - green_point) if max_hr > green_point else 0
-                hue = 120 * (1 - position)  # 120° → 0° (green to red)
-                sat = 0.8
-                val = 0.9 - 0.3 * position  # Darker towards red (0.9 → 0.6)
-            
-            # Convert HSV to RGB
-            rgb = tuple(int(x * 255) for x in colorsys.hsv_to_rgb(hue/360, sat, val))
-            bin_colors.append(f'rgb({rgb[0]},{rgb[1]},{rgb[2]})')
-        
+        bin_colors = _compute_bin_colors(bin_centers, max_hr)
+
         # Add bar chart with gradient colors (using Bar instead of Histogram for color control)
         fig.add_trace(go.Bar(
             x=bin_centers,
-            y=hist_density,
-            width=bin_width * 0.9,  # Slightly narrower to show separation
+            y=hist_density.tolist(),
+            width=float(bin_width * 0.9),  # Slightly narrower to show separation
+            orientation='v',
             marker=dict(
                 color=bin_colors,
                 line=dict(color='white', width=1)
@@ -264,8 +295,8 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
             
             # Add fitted lognormal curve
             fig.add_trace(go.Scatter(
-                x=x_fit,
-                y=y_fit,
+                x=x_fit.tolist(),
+                y=y_fit.tolist(),
                 mode='lines',
                 line=dict(color='#FF6347', width=2.5, dash='solid'),
                 name='Lognormal Fit',
@@ -318,6 +349,7 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
         showgrid=True,
         gridcolor='#E0E0E0',
         tickformat='%H:%M',
+        dtick=3600000,
         row=1, col=1
     )
     fig.update_yaxes(
@@ -465,7 +497,8 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
     
     # Garmin HR Zones
     garmin_zones = {
-        'Z0': (0, max_hr * 0.50, 'Rest'),
+        'Z-1': (0, max_hr * 0.40, 'Rest'),
+        'Z0': (max_hr * 0.40, max_hr * 0.50, 'Moving'),
         'Z1': (max_hr * 0.50, max_hr * 0.60, 'Very Light'),
         'Z2': (max_hr * 0.60, max_hr * 0.70, 'Light'),
         'Z3': (max_hr * 0.70, max_hr * 0.80, 'Moderate'),
@@ -644,8 +677,8 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
     zone_names = list(garmin_zones.keys())
     zone_time_values = [total_zone_times[z] for z in zone_names]
     zone_labels = [f"{z} - {garmin_zones[z][2]}" for z in zone_names]
-    # Updated zone colors: Z0=grey, Z1=light blue, Z2=green, Z3=yellow/orange, Z4=red, Z5=dark red
-    zone_colors = ['#808080', '#87CEEB', '#00FF00', '#FFA500', '#FF0000', '#8B0000']
+    # Zone colors: Z-1=gray, Z0=violet, Z1=sky-blue, Z2=green, Z3=amber, Z4=red, Z5=dark-red
+    zone_colors = [ZONE_COLORS[z] for z in ['Z-1', 'Z0', 'Z1', 'Z2', 'Z3', 'Z4', 'Z5']]
     
     fig.add_trace(go.Bar(
         y=zone_labels,
@@ -721,42 +754,14 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
         bin_area = bin_width * len(all_waking_hrs)
         hist_density = hist_values / bin_area
         
-        # Calculate color for each bin with three-tier gradient:
-        # Below Z0 (50% max HR): Dark violet
-        # Z0 to Green Point (50-60% max HR): Violet to Green
-        # Green Point to Max (60-100% max HR): Green to Dark Red
-        z0_threshold = max_hr * 0.5  # Z0 is 50% of max HR
-        green_point = max_hr * 0.6  # Green at 60% of max HR (~108 bpm for max HR 180)
-        bin_colors = []
-        for bin_center in bin_centers:
-            if bin_center < z0_threshold:
-                # Below Z0: Dark violet (night colors) - darker for lower HR
-                position = bin_center / z0_threshold if z0_threshold > 0 else 0
-                hue = 270  # Violet hue
-                sat = 0.7
-                val = 0.3 + 0.2 * position  # 0.3 (darkest) to 0.5 (lighter)
-            elif bin_center < green_point:
-                # Z0 to Green Point: Violet (270°) to Green (120°)
-                position = (bin_center - z0_threshold) / (green_point - z0_threshold) if green_point > z0_threshold else 0
-                hue = 270 - (270 - 120) * position  # 270° → 120° (violet to green)
-                sat = 0.8
-                val = 0.9
-            else:
-                # Green Point to Max: Green (120°) to Dark Red (0°)
-                position = (bin_center - green_point) / (max_hr - green_point) if max_hr > green_point else 0
-                hue = 120 * (1 - position)  # 120° → 0° (green to red)
-                sat = 0.8
-                val = 0.9 - 0.3 * position  # Darker towards red (0.9 → 0.6)
-            
-            # Convert HSV to RGB
-            rgb = tuple(int(x * 255) for x in colorsys.hsv_to_rgb(hue/360, sat, val))
-            bin_colors.append(f'rgb({rgb[0]},{rgb[1]},{rgb[2]})')
-        
+        bin_colors = _compute_bin_colors(bin_centers, max_hr)
+
         # Add bar chart with gradient colors (using Bar instead of Histogram for color control)
         fig.add_trace(go.Bar(
             x=bin_centers,
-            y=hist_density,
-            width=bin_width * 0.9,  # Slightly narrower to show separation
+            y=hist_density.tolist(),
+            width=float(bin_width * 0.9),  # Slightly narrower to show separation
+            orientation='v',
             marker=dict(
                 color=bin_colors,
                 line=dict(color='white', width=1)
@@ -780,8 +785,8 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
             x_fit = x_fit_shifted + min_hr
             
             fig.add_trace(go.Scatter(
-                x=x_fit,
-                y=y_fit,
+                x=x_fit.tolist(),
+                y=y_fit.tolist(),
                 mode='lines',
                 line=dict(color='#FF6347', width=2.5, dash='solid'),
                 name='Lognormal Fit',
@@ -1155,97 +1160,145 @@ def get_zone_training_data():
     """API endpoint to get zone training data for last 364 days (52 weeks)"""
     try:
         client = get_garmin_client()
-        
-        # Fetch last 364 days (52 weeks)
+
+        # Determine the 364-day window (last 52 weeks, inclusive of today)
         end_date = datetime.now().date()
         start_date = end_date - timedelta(days=364)
-        
-        # Fetch data day by day (GarminClient doesn't have get_weeks_data method)
-        weeks_data = {}
-        current_date = datetime.combine(start_date, datetime.min.time())
-        end_datetime = datetime.combine(end_date, datetime.min.time())
-        
-        while current_date <= end_datetime:
-            date_str = current_date.strftime('%Y-%m-%d')
-            hr_data = client.get_heart_rate_data(current_date)
-            hrv_data = client.get_hrv_data(current_date)
-            
-            # Only include days with actual data
-            if hr_data or hrv_data:
-                weeks_data[date_str] = {
-                    'hr_data': hr_data if hr_data else [],
-                    'hrv': hrv_data
-                }
-            
-            current_date += timedelta(days=1)
-        
-        if not weeks_data:
-            return jsonify({
-                'error': 'No heart rate data found for the last 52 weeks',
-                'message': 'No activity was recorded in this period or data has not synced yet'
-            }), 404
-        
-        # Calculate daily zone times
+        today_str = end_date.strftime('%Y-%m-%d')
+
+        # Build the full ordered list of date strings for the window
+        all_dates = []
+        d = start_date
+        while d <= end_date:
+            all_dates.append(d.strftime('%Y-%m-%d'))
+            d += timedelta(days=1)
+
         max_hr = DEFAULT_MAX_HR
         garmin_zones = {
-            'Z0': (0, max_hr * 0.50, 'Rest'),
+            'Z-1': (0, max_hr * 0.40, 'Rest'),
+            'Z0': (max_hr * 0.40, max_hr * 0.50, 'Moving'),
             'Z1': (max_hr * 0.50, max_hr * 0.60, 'Very Light'),
             'Z2': (max_hr * 0.60, max_hr * 0.70, 'Light'),
             'Z3': (max_hr * 0.70, max_hr * 0.80, 'Moderate'),
             'Z4': (max_hr * 0.80, max_hr * 0.90, 'Hard'),
             'Z5': (max_hr * 0.90, max_hr * 1.00, 'Maximum'),
         }
-        
-        # Calculate zone times per day
+
+        zone_cache = client.cache  # CacheManager instance (may be None if caching disabled)
+
+        # ── Step 1: bulk-fetch zone training cache for all historical dates ──
+        # A single SQL query replaces up to 364 individual per-day lookups.
+        historical_dates = [ds for ds in all_dates if ds < today_str]
+        if zone_cache is not None:
+            cached_zone_data = zone_cache.get_zone_training_days_bulk(historical_dates)
+        else:
+            cached_zone_data = {}
+
+        # Populate daily_zone_times from the bulk cache result
         daily_zone_times = {}
-        for date_str in sorted(weeks_data.keys()):
-            entry = weeks_data[date_str]
-            
-            # Handle both old format (list) and new format (dict)
-            if isinstance(entry, dict):
-                data = entry.get('hr_data', [])
+        for date_str, cached in cached_zone_data.items():
+            daily_zone_times[date_str] = {
+                'Z-1': cached['z_neg1_minutes'],
+                'Z0':  cached['z0_minutes'],
+                'Z1':  cached['z1_minutes'],
+                'Z2':  cached['z2_minutes'],
+                'Z3':  cached['z3_minutes'],
+                'Z4':  cached['z4_z5_minutes'],
+                'Z5':  0.0,
+            }
+
+        # ── Step 2: for zone cache-miss dates, bulk-fetch HR data from HR cache ──
+        # One SQL query for all cache-miss dates, then only call Garmin API for
+        # dates that are absent from BOTH zone cache and HR cache.
+        cache_miss_dates = [ds for ds in historical_dates if ds not in cached_zone_data]
+        if today_str in all_dates:
+            cache_miss_dates.append(today_str)
+
+        if cache_miss_dates and zone_cache is not None:
+            # Exclude today – it is always re-fetched from the API
+            hr_bulk_dates = [ds for ds in cache_miss_dates if ds < today_str]
+            # zone_cache holds the CacheManager instance which also manages HR data
+            cached_hr_bulk = zone_cache.get_heart_rate_data_bulk(hr_bulk_dates)
+        else:
+            cached_hr_bulk = {}
+
+        # Separate into: (a) HR served from cache, (b) must hit Garmin API
+        hr_from_cache = {}   # date_str -> hr_data list (may be None = no data)
+        api_fetch_dates = []
+        for date_str in cache_miss_dates:
+            if date_str < today_str and date_str in cached_hr_bulk:
+                hr_from_cache[date_str] = cached_hr_bulk[date_str]
             else:
-                data = entry
-            
-            if data:
-                # Filter waking hours data using configured hours
-                waking_hours_data = []
-                for point in data:
-                    hour = point['timestamp'].hour
-                    if WAKING_HOURS_START <= hour < WAKING_HOURS_END:
-                        waking_hours_data.append(point)
-                
-                # Calculate zone distribution for this day
-                zone_counts = {zone: 0 for zone in garmin_zones.keys()}
-                for point in waking_hours_data:
-                    hr = point['heart_rate']
-                    for zone_name, (lower, upper, _) in garmin_zones.items():
-                        if lower <= hr < upper:
-                            zone_counts[zone_name] += 1
-                            break
-                
-                # Convert counts to time in minutes
-                # Assumes data points are evenly spaced throughout waking hours
-                # Each point's proportion of total points represents its time share
-                total_points = sum(zone_counts.values())
-                zone_times = {}
-                for zone in zone_counts:
-                    if total_points > 0:
-                        time_minutes = (zone_counts[zone] / total_points) * WAKING_HOURS_DURATION
-                        zone_times[zone] = time_minutes
-                    else:
-                        zone_times[zone] = 0
-                
-                daily_zone_times[date_str] = zone_times
-        
+                api_fetch_dates.append(date_str)
+
+        # Build a combined iterable: cached HR data + fresh API data
+        def _iter_hr_data():
+            for ds, hr_data in hr_from_cache.items():
+                yield ds, hr_data
+            for ds in sorted(api_fetch_dates):
+                current_date = datetime.strptime(ds, '%Y-%m-%d')
+                yield ds, client.get_heart_rate_data(current_date)
+
+        # Compute zone times; collect all new rows for a single batch write
+        new_zone_rows = []
+        for date_str, hr_data in _iter_hr_data():
+            if not hr_data:
+                continue
+
+            waking_hours_data = [
+                p for p in hr_data
+                if WAKING_HOURS_START <= p['timestamp'].hour < WAKING_HOURS_END
+            ]
+
+            zone_counts = {zone: 0 for zone in garmin_zones.keys()}
+            for point in waking_hours_data:
+                hr = point['heart_rate']
+                for zone_name, (lower, upper, _) in garmin_zones.items():
+                    if lower <= hr < upper:
+                        zone_counts[zone_name] += 1
+                        break
+
+            total_points = sum(zone_counts.values())
+            zone_times = {
+                zone: (zone_counts[zone] / total_points) * WAKING_HOURS_DURATION
+                       if total_points > 0 else 0
+                for zone in zone_counts
+            }
+
+            daily_zone_times[date_str] = zone_times
+
+            # Queue for batch write (skip today – handled inside bulk write)
+            if zone_cache is not None:
+                new_zone_rows.append({
+                    'date_str': date_str,
+                    'z_neg1': zone_times['Z-1'],
+                    'z0':     zone_times['Z0'],
+                    'z1':     zone_times['Z1'],
+                    'z2':     zone_times['Z2'],
+                    'z3':     zone_times['Z3'],
+                    'z4_z5':  zone_times['Z4'] + zone_times['Z5'],
+                })
+
+        # Persist all newly-computed zone rows in a single transaction
+        if new_zone_rows and zone_cache is not None:
+            zone_cache.set_zone_training_days_bulk(new_zone_rows)
+
+        if not daily_zone_times:
+            return jsonify({
+                'error': 'No heart rate data found for the last 52 weeks',
+                'message': 'No activity was recorded in this period or data has not synced yet'
+            }), 404
+
         # Prepare data for charts
         # Last 28 days for daily charts (or fewer if less data available)
         last_28_dates = sorted(daily_zone_times.keys())[-28:]
+        daily_z1 = [daily_zone_times[date].get('Z1', 0) for date in last_28_dates]
         daily_z2 = [daily_zone_times[date]['Z2'] for date in last_28_dates]
         daily_z4_z5 = [daily_zone_times[date]['Z4'] + daily_zone_times[date]['Z5'] for date in last_28_dates]
         num_daily_days = len(last_28_dates)
         
         # Aggregate by ISO calendar week for weekly charts
+        weekly_z1 = {}
         weekly_z2 = {}
         weekly_z4_z5 = {}
         for date_str, zone_times in daily_zone_times.items():
@@ -1253,117 +1306,240 @@ def get_zone_training_data():
             year, week, _ = date_obj.isocalendar()
             week_key = f"{year}-W{week:02d}"
             
-            if week_key not in weekly_z2:
+            if week_key not in weekly_z1:
+                weekly_z1[week_key] = 0
                 weekly_z2[week_key] = 0
                 weekly_z4_z5[week_key] = 0
             
+            weekly_z1[week_key] += zone_times.get('Z1', 0)
             weekly_z2[week_key] += zone_times['Z2']
             weekly_z4_z5[week_key] += zone_times['Z4'] + zone_times['Z5']
         
         # Get last 52 weeks (or fewer if less data available)
         last_52_weeks = sorted(weekly_z2.keys())[-52:]
+        weekly_z1_values = [weekly_z1[week] for week in last_52_weeks]
         weekly_z2_values = [weekly_z2[week] for week in last_52_weeks]
         weekly_z4_z5_values = [weekly_z4_z5[week] for week in last_52_weeks]
         num_weekly_weeks = len(last_52_weeks)
         
-        # Create 2x2 subplot with dynamic titles based on actual data
+        # Create 3x2 subplot: daily charts on the left column, weekly on the right
+        # Row 1: Z1  |  Row 2: Z2  |  Row 3: Z4+Z5
         daily_title = f'Last {num_daily_days} Days' if num_daily_days < 28 else 'Last 28 Days'
         weekly_title = f'Last {num_weekly_weeks} Weeks' if num_weekly_weeks < 52 else 'Last 52 Weeks'
         
         fig = make_subplots(
-            rows=2, cols=2,
-            subplot_titles=(f'Daily Z2 Time ({daily_title})', 
+            rows=3, cols=2,
+            subplot_titles=(f'Daily Z1 Time ({daily_title})',
+                          f'Weekly Z1 Time ({weekly_title})',
+                          f'Daily Z2 Time ({daily_title})',
+                          f'Weekly Z2 Time ({weekly_title})',
                           f'Daily Z4+Z5 Time ({daily_title})',
-                          f'Weekly Z2 Time ({weekly_title})', 
                           f'Weekly Z4+Z5 Time ({weekly_title})'),
             vertical_spacing=0.15,
             horizontal_spacing=0.1
         )
         
-        # Chart A: Daily Z2 (top-left)
+        ma_period = 10  # shared MA window
+
+        # Row 1 Col 1: Daily Z1 (light-blue bars)
+        fig.add_trace(
+            go.Bar(
+                x=last_28_dates,
+                y=daily_z1,
+                marker_color=ZONE_COLORS['Z1'],
+                name='Z1',
+                showlegend=False,
+                customdata=[format_time(v) for v in daily_z1],
+                hovertemplate='<b>%{x}</b><br>Time: %{customdata}<extra></extra>'
+            ),
+            row=1, col=1
+        )
+        daily_z1_ma = calculate_moving_average(daily_z1, ma_period)
+        fig.add_trace(
+            go.Scatter(
+                x=last_28_dates,
+                y=daily_z1_ma,
+                mode='lines',
+                line=dict(color='darkblue', width=2, dash='solid'),
+                name='10-day MA',
+                showlegend=False,
+                customdata=[format_time(v) if v is not None else '' for v in daily_z1_ma],
+                hovertemplate='<b>%{x}</b><br>10-day MA: %{customdata}<extra></extra>'
+            ),
+            row=1, col=1
+        )
+
+        # Row 1 Col 2: Weekly Z1
+        fig.add_trace(
+            go.Bar(
+                x=last_52_weeks,
+                y=weekly_z1_values,
+                marker_color=ZONE_COLORS['Z1'],
+                name='Z1',
+                showlegend=False,
+                customdata=[format_time(v) for v in weekly_z1_values],
+                hovertemplate='<b>%{x}</b><br>Time: %{customdata}<extra></extra>'
+            ),
+            row=1, col=2
+        )
+        weekly_z1_ma = calculate_moving_average(weekly_z1_values, ma_period)
+        fig.add_trace(
+            go.Scatter(
+                x=last_52_weeks,
+                y=weekly_z1_ma,
+                mode='lines',
+                line=dict(color='darkblue', width=2, dash='solid'),
+                name='10-week MA',
+                showlegend=False,
+                customdata=[format_time(v) if v is not None else '' for v in weekly_z1_ma],
+                hovertemplate='<b>%{x}</b><br>10-week MA: %{customdata}<extra></extra>'
+            ),
+            row=1, col=2
+        )
+
+        # Row 2 Col 1: Daily Z2 (green bars)
         fig.add_trace(
             go.Bar(
                 x=last_28_dates,
                 y=daily_z2,
-                marker_color='green',
+                marker_color=ZONE_COLORS['Z2'],
                 name='Z2',
                 showlegend=False,
                 customdata=[format_time(v) for v in daily_z2],
                 hovertemplate='<b>%{x}</b><br>Time: %{customdata}<extra></extra>'
             ),
-            row=1, col=1
+            row=2, col=1
         )
-        
-        # Chart B: Daily Z4+Z5 (top-right)
+        daily_z2_ma = calculate_moving_average(daily_z2, ma_period)
         fig.add_trace(
-            go.Bar(
+            go.Scatter(
                 x=last_28_dates,
-                y=daily_z4_z5,
-                marker_color='red',
-                name='Z4+Z5',
+                y=daily_z2_ma,
+                mode='lines',
+                line=dict(color='darkgreen', width=2, dash='solid'),
+                name='10-day MA',
                 showlegend=False,
-                customdata=[format_time(v) for v in daily_z4_z5],
-                hovertemplate='<b>%{x}</b><br>Time: %{customdata}<extra></extra>'
+                customdata=[format_time(v) if v is not None else '' for v in daily_z2_ma],
+                hovertemplate='<b>%{x}</b><br>10-day MA: %{customdata}<extra></extra>'
             ),
-            row=1, col=2
+            row=2, col=1
         )
-        
-        # Chart C: Weekly Z2 (bottom-left)
+
+        # Row 2 Col 2: Weekly Z2
         fig.add_trace(
             go.Bar(
                 x=last_52_weeks,
                 y=weekly_z2_values,
-                marker_color='green',
+                marker_color=ZONE_COLORS['Z2'],
                 name='Z2',
                 showlegend=False,
                 customdata=[format_time(v) for v in weekly_z2_values],
                 hovertemplate='<b>%{x}</b><br>Time: %{customdata}<extra></extra>'
             ),
-            row=2, col=1
+            row=2, col=2
         )
-        
-        # Chart D: Weekly Z4+Z5 (bottom-right)
+        weekly_z2_ma = calculate_moving_average(weekly_z2_values, ma_period)
+        fig.add_trace(
+            go.Scatter(
+                x=last_52_weeks,
+                y=weekly_z2_ma,
+                mode='lines',
+                line=dict(color='darkgreen', width=2, dash='solid'),
+                name='10-week MA',
+                showlegend=False,
+                customdata=[format_time(v) if v is not None else '' for v in weekly_z2_ma],
+                hovertemplate='<b>%{x}</b><br>10-week MA: %{customdata}<extra></extra>'
+            ),
+            row=2, col=2
+        )
+
+        # Row 3 Col 1: Daily Z4+Z5 (Z4 color used – Z4 dominates hard/max effort time)
+        fig.add_trace(
+            go.Bar(
+                x=last_28_dates,
+                y=daily_z4_z5,
+                marker_color=ZONE_COLORS['Z4'],
+                name='Z4+Z5',
+                showlegend=False,
+                customdata=[format_time(v) for v in daily_z4_z5],
+                hovertemplate='<b>%{x}</b><br>Time: %{customdata}<extra></extra>'
+            ),
+            row=3, col=1
+        )
+        daily_z4_z5_ma = calculate_moving_average(daily_z4_z5, ma_period)
+        fig.add_trace(
+            go.Scatter(
+                x=last_28_dates,
+                y=daily_z4_z5_ma,
+                mode='lines',
+                line=dict(color='darkred', width=2, dash='solid'),
+                name='10-day MA',
+                showlegend=False,
+                customdata=[format_time(v) if v is not None else '' for v in daily_z4_z5_ma],
+                hovertemplate='<b>%{x}</b><br>10-day MA: %{customdata}<extra></extra>'
+            ),
+            row=3, col=1
+        )
+
+        # Row 3 Col 2: Weekly Z4+Z5 (Z4 color used – Z4 dominates hard/max effort time)
         fig.add_trace(
             go.Bar(
                 x=last_52_weeks,
                 y=weekly_z4_z5_values,
-                marker_color='red',
+                marker_color=ZONE_COLORS['Z4'],
                 name='Z4+Z5',
                 showlegend=False,
                 customdata=[format_time(v) for v in weekly_z4_z5_values],
                 hovertemplate='<b>%{x}</b><br>Time: %{customdata}<extra></extra>'
             ),
-            row=2, col=2
+            row=3, col=2
+        )
+        weekly_z4_z5_ma = calculate_moving_average(weekly_z4_z5_values, ma_period)
+        fig.add_trace(
+            go.Scatter(
+                x=last_52_weeks,
+                y=weekly_z4_z5_ma,
+                mode='lines',
+                line=dict(color='darkred', width=2, dash='solid'),
+                name='10-week MA',
+                showlegend=False,
+                customdata=[format_time(v) if v is not None else '' for v in weekly_z4_z5_ma],
+                hovertemplate='<b>%{x}</b><br>10-week MA: %{customdata}<extra></extra>'
+            ),
+            row=3, col=2
         )
         
-        # Update axes labels
-        fig.update_xaxes(title_text="Date", row=1, col=1, tickangle=-45)
-        fig.update_xaxes(title_text="Date", row=1, col=2, tickangle=-45)
-        fig.update_xaxes(title_text="Week", row=2, col=1, tickangle=-45)
-        fig.update_xaxes(title_text="Week", row=2, col=2, tickangle=-45)
+        # Update x-axes labels: left col (daily) uses "Date", right col (weekly) uses "Week"
+        for row in [1, 2, 3]:
+            fig.update_xaxes(title_text="Date", row=row, col=1, tickangle=-45)
+            fig.update_xaxes(title_text="Week", row=row, col=2, tickangle=-45)
         
         # Calculate max values for appropriate tick spacing
-        max_daily = max(max(daily_z2) if daily_z2 else [0], max(daily_z4_z5) if daily_z4_z5 else [0])
-        max_weekly = max(max(weekly_z2_values) if weekly_z2_values else [0], 
-                         max(weekly_z4_z5_values) if weekly_z4_z5_values else [0])
+        max_daily = max(
+            max(daily_z1) if daily_z1 else 0,
+            max(daily_z2) if daily_z2 else 0,
+            max(daily_z4_z5) if daily_z4_z5 else 0
+        )
+        max_weekly = max(
+            max(weekly_z1_values) if weekly_z1_values else 0,
+            max(weekly_z2_values) if weekly_z2_values else 0,
+            max(weekly_z4_z5_values) if weekly_z4_z5_values else 0
+        )
         
-        # Generate tick values and formatted labels for daily charts (every 30 min)
+        # Generate tick values and formatted labels
         daily_tick_vals = list(range(0, int(max_daily) + 60, 30))
         daily_tick_text = [format_time(v) for v in daily_tick_vals]
-        
-        # Generate tick values and formatted labels for weekly charts (every 60 min)
         weekly_tick_vals = list(range(0, int(max_weekly) + 120, 60))
         weekly_tick_text = [format_time(v) for v in weekly_tick_vals]
-        
-        # Update Y-axes with formatted time labels
-        fig.update_yaxes(title_text="Time", tickvals=daily_tick_vals, ticktext=daily_tick_text, row=1, col=1)
-        fig.update_yaxes(title_text="Time", tickvals=daily_tick_vals, ticktext=daily_tick_text, row=1, col=2)
-        fig.update_yaxes(title_text="Time", tickvals=weekly_tick_vals, ticktext=weekly_tick_text, row=2, col=1)
-        fig.update_yaxes(title_text="Time", tickvals=weekly_tick_vals, ticktext=weekly_tick_text, row=2, col=2)
+
+        # Apply Y-axes for all rows
+        for row in [1, 2, 3]:
+            fig.update_yaxes(title_text="Time", tickvals=daily_tick_vals, ticktext=daily_tick_text, row=row, col=1)
+            fig.update_yaxes(title_text="Time", tickvals=weekly_tick_vals, ticktext=weekly_tick_text, row=row, col=2)
         
         # Update layout
         fig.update_layout(
-            height=800,
+            height=1300,
             showlegend=False,
             title_text="Zone Training Analysis",
             title_x=0.5,
@@ -1377,6 +1553,334 @@ def get_zone_training_data():
             'chart': chart_json
         })
         
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+
+
+@app.route('/get_zone_calendar_data')
+def get_zone_calendar_data():
+    """API endpoint for the 6th dashboard: stacked-bar zone calendar.
+
+    Returns 5 rows (current ISO week + 4 prior), each row Mon–Sun.
+    Each day shows all zones (Z-1 through Z4+Z5) as a stacked vertical bar.
+    """
+    try:
+        client = get_garmin_client()
+
+        # Determine the 5-week window: current ISO week's Monday back to 4 prior Mondays
+        today = datetime.now().date()
+        # Monday of current ISO week
+        current_monday = today - timedelta(days=today.weekday())
+        # We need 5 full weeks starting from 4 weeks before current_monday
+        window_start = current_monday - timedelta(weeks=4)
+        # Fetch up to today (current week may be partial)
+        window_end = today
+
+        # Fetch HR data for the window
+        days_data = {}
+        current_date = datetime.combine(window_start, datetime.min.time())
+        end_datetime = datetime.combine(window_end, datetime.min.time())
+        while current_date <= end_datetime:
+            date_str = current_date.strftime('%Y-%m-%d')
+            hr_data = client.get_heart_rate_data(current_date)
+            if hr_data:
+                days_data[date_str] = hr_data
+            current_date += timedelta(days=1)
+
+        max_hr = DEFAULT_MAX_HR
+        garmin_zones = {
+            'Z-1': (0, max_hr * 0.40, 'Rest'),
+            'Z0':  (max_hr * 0.40, max_hr * 0.50, 'Moving'),
+            'Z1':  (max_hr * 0.50, max_hr * 0.60, 'Very Light'),
+            'Z2':  (max_hr * 0.60, max_hr * 0.70, 'Light'),
+            'Z3':  (max_hr * 0.70, max_hr * 0.80, 'Moderate'),
+            'Z4':  (max_hr * 0.80, max_hr * 0.90, 'Hard'),
+            'Z5':  (max_hr * 0.90, max_hr * 1.00, 'Maximum'),
+        }
+
+        today_str = today.strftime('%Y-%m-%d')
+        zone_cache = client.cache
+
+        def compute_zone_times(date_str, hr_data):
+            """Compute zone minutes from HR data for one day, using waking hours."""
+            waking = [p for p in hr_data if WAKING_HOURS_START <= p['timestamp'].hour < WAKING_HOURS_END]
+            zone_counts = {z: 0 for z in garmin_zones}
+            for point in waking:
+                hr = point['heart_rate']
+                for zone_name, (lo, hi, _) in garmin_zones.items():
+                    if lo <= hr < hi:
+                        zone_counts[zone_name] += 1
+                        break
+            total = sum(zone_counts.values())
+            times = {}
+            for z in zone_counts:
+                times[z] = (zone_counts[z] / total) * WAKING_HOURS_DURATION if total > 0 else 0.0
+            return times
+
+        # Compute or retrieve zone times for each day in the window
+        daily_zone_times = {}
+        for d in sorted(days_data.keys()):
+            if zone_cache is not None and d < today_str:
+                cached = zone_cache.get_zone_training_day(d)
+                if cached is not None:
+                    daily_zone_times[d] = {
+                        'Z-1': cached['z_neg1_minutes'],
+                        'Z0':  cached['z0_minutes'],
+                        'Z1':  cached['z1_minutes'],
+                        'Z2':  cached['z2_minutes'],
+                        'Z3':  cached['z3_minutes'],
+                        'Z4':  cached['z4_z5_minutes'],
+                        'Z5':  0.0,
+                    }
+                    continue
+            zt = compute_zone_times(d, days_data[d])
+            daily_zone_times[d] = zt
+            if zone_cache is not None and d < today_str:
+                zone_cache.set_zone_training_day(
+                    d,
+                    zt['Z-1'], zt['Z0'], zt['Z1'],
+                    zt['Z2'], zt['Z3'],
+                    zt['Z4'] + zt['Z5']
+                )
+
+        # Build 5-week rows (oldest first)
+        weeks = []
+        for w in range(4, -1, -1):
+            monday = current_monday - timedelta(weeks=w)
+            days_of_week = [monday + timedelta(days=d) for d in range(7)]
+            weeks.append(days_of_week)
+
+        # Zones ordered for stacking; combined Z4+Z5 shown as one layer
+        zone_order = ['Z-1', 'Z0', 'Z1', 'Z2', 'Z3', 'Z4']
+        zone_labels = {'Z-1': 'Z-1 Rest', 'Z0': 'Z0 Moving', 'Z1': 'Z1 Very Light',
+                       'Z2': 'Z2 Light', 'Z3': 'Z3 Moderate', 'Z4': 'Z4+Z5 Hard/Max'}
+        zone_colors = {k: ZONE_COLORS[k] for k in ['Z-1', 'Z0', 'Z1', 'Z2', 'Z3', 'Z4']}
+
+        # Weekday labels
+        day_names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
+        # Build subplot grid: 5 rows × 1 col
+        week_titles = []
+        for w_days in weeks:
+            monday = w_days[0]
+            sunday = w_days[6]
+            week_titles.append(f"Week of {monday.strftime('%b %d')} – {sunday.strftime('%b %d, %Y')}")
+
+        fig = make_subplots(
+            rows=5, cols=1,
+            subplot_titles=week_titles,
+            vertical_spacing=0.08
+        )
+
+        # Add grouped bar traces (one trace per zone); only show legend entries for the first row
+        for row_idx, w_days in enumerate(weeks, start=1):
+            x_labels = []
+            for day in w_days:
+                d_str = day.strftime('%Y-%m-%d')
+                x_labels.append(f"{day_names[day.weekday()]}<br>{day.strftime('%m/%d')}")
+
+            for zone_key in zone_order:
+                y_vals = []
+                custom_vals = []
+                for day in w_days:
+                    d_str = day.strftime('%Y-%m-%d')
+                    zt = daily_zone_times.get(d_str, {})
+                    minutes = zt.get(zone_key, 0)
+                    # For Z4 bar include both Z4 and Z5 (Z5 stored as 0 from cache, but computed from actual)
+                    if zone_key == 'Z4':
+                        minutes += zt.get('Z5', 0)
+                    y_vals.append(minutes)
+                    custom_vals.append(format_time(minutes))
+
+                fig.add_trace(
+                    go.Bar(
+                        x=x_labels,
+                        y=y_vals,
+                        name=zone_labels[zone_key],
+                        marker_color=zone_colors[zone_key],
+                        showlegend=(row_idx == 1),
+                        legendgroup=zone_key,
+                        customdata=custom_vals,
+                        hovertemplate='<b>%{x}</b><br>' + zone_labels[zone_key] + ': %{customdata}<extra></extra>'
+                    ),
+                    row=row_idx, col=1
+                )
+
+        for row_idx in range(1, 6):
+            fig.update_xaxes(tickangle=0, row=row_idx, col=1)
+            fig.update_yaxes(title_text='Minutes', row=row_idx, col=1)
+
+        fig.update_layout(
+            barmode='group',
+            height=1400,
+            showlegend=True,
+            legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1),
+            title_text='Zone Calendar – Last 4 Weeks + Current',
+            title_x=0.5,
+            margin=dict(t=120, b=60, l=80, r=60)
+        )
+
+        chart_json = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
+        return jsonify({'chart': chart_json})
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/get_hr_histogram_data')
+def get_hr_histogram_data():
+    """7th dashboard: per-day HR distribution histograms (colored + lognormal fit).
+
+    Returns a 5-row × 7-col Plotly figure covering the same 5-week window as the
+    zone calendar (current ISO week + 4 prior).  Each cell shows the waking-hours
+    HR distribution for that day, coloured with the zone-gradient and overlaid with
+    a fitted lognormal curve.
+    """
+    try:
+        client = get_garmin_client()
+
+        today = datetime.now().date()
+        current_monday = today - timedelta(days=today.weekday())
+        window_start = current_monday - timedelta(weeks=4)
+        window_end = today
+
+        # Fetch HR data for the entire window
+        days_data = {}
+        current_date = datetime.combine(window_start, datetime.min.time())
+        end_datetime = datetime.combine(window_end, datetime.min.time())
+        while current_date <= end_datetime:
+            date_str = current_date.strftime('%Y-%m-%d')
+            hr_data = client.get_heart_rate_data(current_date)
+            if hr_data:
+                days_data[date_str] = hr_data
+            current_date += timedelta(days=1)
+
+        max_hr = DEFAULT_MAX_HR
+        nbins = 30  # fewer bins so small subplots remain readable
+
+        # Build 5-week row structure (oldest week first)
+        weeks = []
+        for w in range(4, -1, -1):
+            monday = current_monday - timedelta(weeks=w)
+            weeks.append([monday + timedelta(days=d) for d in range(7)])
+
+        day_names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
+        # Row titles (shown on y-axis side via subplot row labels)
+        week_row_titles = []
+        for w_days in weeks:
+            monday = w_days[0]
+            sunday = w_days[6]
+            week_row_titles.append(
+                f"Week of {monday.strftime('%b %d')} – {sunday.strftime('%b %d, %Y')}"
+            )
+
+        # Subplot titles: one per cell in row-major order (5 rows × 7 cols = 35)
+        subplot_titles = []
+        for w_days in weeks:
+            for day in w_days:
+                subplot_titles.append(
+                    f"{day_names[day.weekday()]} {day.strftime('%m/%d')}"
+                )
+
+        fig = make_subplots(
+            rows=5, cols=7,
+            subplot_titles=subplot_titles,
+            vertical_spacing=0.07,
+            horizontal_spacing=0.02,
+        )
+
+        for row_idx, w_days in enumerate(weeks, start=1):
+            for col_idx, day in enumerate(w_days, start=1):
+                d_str = day.strftime('%Y-%m-%d')
+                hr_data = days_data.get(d_str)
+                if not hr_data:
+                    continue
+
+                waking_hrs = [
+                    p['heart_rate'] for p in hr_data
+                    if WAKING_HOURS_START <= p['timestamp'].hour < WAKING_HOURS_END
+                ]
+                if not waking_hrs:
+                    continue
+
+                hist_values, bin_edges = np.histogram(waking_hrs, bins=nbins)
+                bin_centers = [
+                    (bin_edges[i] + bin_edges[i + 1]) / 2
+                    for i in range(len(bin_edges) - 1)
+                ]
+                bin_width = bin_edges[1] - bin_edges[0]
+                bin_area = bin_width * len(waking_hrs)
+                hist_density = (hist_values / bin_area).tolist()
+
+                bin_colors = _compute_bin_colors(bin_centers, max_hr)
+
+                fig.add_trace(
+                    go.Bar(
+                        x=bin_centers,
+                        y=hist_density,
+                        width=float(bin_width * 0.95),
+                        marker=dict(color=bin_colors, line=dict(width=0)),
+                        showlegend=False,
+                        name=d_str,
+                        hovertemplate='<b>' + d_str + '</b><br>HR: %{x:.0f} bpm<br>Density: %{y:.4f}<extra></extra>',
+                    ),
+                    row=row_idx, col=col_idx,
+                )
+
+                # Lognormal fit
+                min_hr = min(waking_hrs)
+                hr_shifted = [hr - min_hr for hr in waking_hrs if hr > min_hr]
+                fit_range = max_hr - min_hr
+                if hr_shifted and fit_range > 0:
+                    shape, loc, scale = stats.lognorm.fit(hr_shifted, floc=0)
+                    x_fit_shifted = np.linspace(0, fit_range, 150)
+                    y_fit = stats.lognorm.pdf(x_fit_shifted, shape, loc, scale)
+                    x_fit = (x_fit_shifted + min_hr).tolist()
+
+                    fig.add_trace(
+                        go.Scatter(
+                            x=x_fit,
+                            y=y_fit.tolist(),
+                            mode='lines',
+                            line=dict(color='#FF6347', width=1.5),
+                            showlegend=False,
+                        ),
+                        row=row_idx, col=col_idx,
+                    )
+
+        # Uniform axes: hide tick labels to keep cells compact
+        for r in range(1, 6):
+            for c in range(1, 8):
+                fig.update_xaxes(
+                    range=[0, max_hr],
+                    showticklabels=False,
+                    showgrid=True,
+                    gridcolor='#E8E8E8',
+                    row=r, col=c,
+                )
+                fig.update_yaxes(
+                    showticklabels=False,
+                    showgrid=False,
+                    row=r, col=c,
+                )
+
+        fig.update_layout(
+            height=1400,
+            showlegend=False,
+            title_text='Daily HR Distributions – Last 4 Weeks + Current',
+            title_x=0.5,
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            margin=dict(t=100, b=60, l=40, r=40),
+            font=dict(family='Arial, sans-serif', size=10, color='#333'),
+        )
+
+        chart_json = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
+        return jsonify({'chart': chart_json})
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

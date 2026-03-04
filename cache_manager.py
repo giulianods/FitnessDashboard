@@ -67,6 +67,27 @@ class CacheManager:
                 )
             ''')
             
+            # Create zone_training_cache table (stores pre-computed daily zone minutes)
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS zone_training_cache (
+                    date TEXT PRIMARY KEY,
+                    z_neg1_minutes REAL NOT NULL,
+                    z0_minutes REAL NOT NULL,
+                    z1_minutes REAL NOT NULL,
+                    z2_minutes REAL NOT NULL,
+                    z3_minutes REAL NOT NULL,
+                    z4_z5_minutes REAL NOT NULL,
+                    cached_at TEXT NOT NULL
+                )
+            ''')
+
+            # Migrations: add columns that may not exist in older DBs (ALTER TABLE is idempotent via try/except)
+            for col in ('z1_minutes REAL', 'z_neg1_minutes REAL', 'z0_minutes REAL', 'z3_minutes REAL'):
+                try:
+                    cursor.execute(f'ALTER TABLE zone_training_cache ADD COLUMN {col}')
+                except Exception:
+                    pass  # column already exists
+
             # Create index on cached_at for efficient cleanup
             cursor.execute('''
                 CREATE INDEX IF NOT EXISTS idx_hr_cached_at 
@@ -169,7 +190,14 @@ class CacheManager:
             data: List of heart rate data points, or None if no data available
         """
         date_str = date.strftime('%Y-%m-%d')
-        cached_at = datetime.now().isoformat()
+        now = datetime.now()
+
+        # Do not cache today's data – it is still being accumulated
+        if date.date() == now.date():
+            logger.debug(f"Skipping cache write for today ({date_str}) – data may be incomplete")
+            return
+
+        cached_at = now.isoformat()
         
         # Handle None values (no data available for this date)
         if data is None:
@@ -264,7 +292,14 @@ class CacheManager:
             value: HRV value (can be None)
         """
         date_str = date.strftime('%Y-%m-%d')
-        cached_at = datetime.now().isoformat()
+        now = datetime.now()
+
+        # Do not cache today's data – it is still being accumulated
+        if date.date() == now.date():
+            logger.debug(f"Skipping cache write for today ({date_str}) – data may be incomplete")
+            return
+
+        cached_at = now.isoformat()
         
         # Store in database (persistent)
         with sqlite3.connect(self.db_path) as conn:
@@ -281,6 +316,259 @@ class CacheManager:
         self._memory_cache['hrv'][date_str] = (value, cached_at)
         logger.debug(f"Cached HRV data for {date_str} (value: {value})")
     
+    def get_heart_rate_data_bulk(self, date_strings: List[str]) -> Dict[str, Optional[List[Dict]]]:
+        """
+        Get cached heart rate data for multiple dates in a single SQL query.
+
+        Checks the in-memory cache first for each date, then issues one SQL
+        query for all remaining dates.  The memory cache is populated for every
+        database hit so subsequent per-date calls are free.
+
+        Args:
+            date_strings: List of date strings in 'YYYY-MM-DD' format
+
+        Returns:
+            Dict mapping date_str -> list-of-HR-points (or None for "NO_DATA"
+            sentinel rows).  Dates that are absent or whose cached_at has
+            expired are simply omitted from the result.
+        """
+        if not date_strings:
+            return {}
+
+        result: Dict[str, Optional[List[Dict]]] = {}
+        db_lookup_dates = []
+
+        # TIER 1: serve as many dates as possible from memory cache
+        for date_str in date_strings:
+            if date_str in self._memory_cache['hr']:
+                data, cached_at = self._memory_cache['hr'][date_str]
+                if self._is_cache_valid(cached_at):
+                    result[date_str] = data
+                else:
+                    del self._memory_cache['hr'][date_str]
+                    db_lookup_dates.append(date_str)
+            else:
+                db_lookup_dates.append(date_str)
+
+        if not db_lookup_dates:
+            logger.debug(
+                f"Bulk HR cache: {len(result)}/{len(date_strings)} memory hits"
+            )
+            return result
+
+        # TIER 2: one SQL query for all remaining dates
+        placeholders = ','.join('?' * len(db_lookup_dates))
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                f'SELECT date, data, cached_at FROM heart_rate_data '
+                f'WHERE date IN ({placeholders})',
+                db_lookup_dates,
+            )
+            rows = cursor.fetchall()
+
+        expired_dates = []
+        for date_str, data_json, cached_at in rows:
+            if not self._is_cache_valid(cached_at):
+                expired_dates.append(date_str)
+                continue
+
+            if data_json == '"NO_DATA"':
+                parsed: Optional[List[Dict]] = None
+            else:
+                parsed = json.loads(data_json)
+                for point in parsed:
+                    point['timestamp'] = datetime.fromisoformat(point['timestamp'])
+
+            result[date_str] = parsed
+            # Populate memory cache so future per-date lookups are free
+            self._memory_cache['hr'][date_str] = (parsed, cached_at)
+
+        # Clean up any expired rows found in the bulk read
+        if expired_dates:
+            with sqlite3.connect(self.db_path) as conn:
+                expired_placeholders = ','.join('?' * len(expired_dates))
+                conn.execute(
+                    f'DELETE FROM heart_rate_data WHERE date IN ({expired_placeholders})',
+                    expired_dates,
+                )
+                conn.commit()
+
+        logger.debug(
+            f"Bulk HR cache: {len(result)}/{len(date_strings)} hits "
+            f"({len(result) - (len(date_strings) - len(db_lookup_dates))} from DB)"
+        )
+        return result
+
+    def set_zone_training_days_bulk(self, rows: List[Dict]) -> None:
+        """
+        Cache pre-computed zone training minutes for multiple dates in a single
+        SQLite transaction.  Today's date is automatically skipped.
+
+        Args:
+            rows: List of dicts, each with keys:
+                'date_str', 'z_neg1', 'z0', 'z1', 'z2', 'z3', 'z4_z5'
+        """
+        if not rows:
+            return
+
+        today_str = datetime.now().strftime('%Y-%m-%d')
+        cached_at = datetime.now().isoformat()
+
+        filtered = [r for r in rows if r['date_str'] != today_str]
+        if not filtered:
+            return
+
+        with sqlite3.connect(self.db_path) as conn:
+            conn.executemany(
+                '''INSERT OR REPLACE INTO zone_training_cache
+                       (date, z_neg1_minutes, z0_minutes, z1_minutes,
+                        z2_minutes, z3_minutes, z4_z5_minutes, cached_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                [
+                    (
+                        r['date_str'],
+                        r['z_neg1'], r['z0'], r['z1'],
+                        r['z2'], r['z3'], r['z4_z5'],
+                        cached_at,
+                    )
+                    for r in filtered
+                ],
+            )
+            conn.commit()
+
+        logger.debug(f"Bulk-cached zone training for {len(filtered)} dates")
+
+    def get_zone_training_days_bulk(self, date_strings: List[str]) -> Dict[str, Dict]:
+        """
+        Get cached zone training minutes for multiple dates in a single SQL query.
+
+        Args:
+            date_strings: List of date strings in 'YYYY-MM-DD' format
+
+        Returns:
+            Dict mapping date_str -> zone_data_dict for every date that has a
+            valid cached row.  Dates that are absent or have NULL zone columns
+            (stale pre-migration rows) are simply omitted from the result.
+        """
+        if not date_strings:
+            return {}
+
+        placeholders = ','.join('?' * len(date_strings))
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                f'SELECT date, z_neg1_minutes, z0_minutes, z1_minutes, '
+                f'z2_minutes, z3_minutes, z4_z5_minutes '
+                f'FROM zone_training_cache WHERE date IN ({placeholders})',
+                date_strings,
+            )
+            rows = cursor.fetchall()
+
+        result = {}
+        for date_str, z_neg1, z0, z1, z2, z3, z4_z5 in rows:
+            # Skip stale rows that are missing zone columns (old schema)
+            if any(v is None for v in (z_neg1, z0, z1, z2, z3, z4_z5)):
+                logger.debug(f"Zone training cache STALE (missing columns) for {date_str}")
+                continue
+            result[date_str] = {
+                'z_neg1_minutes': z_neg1,
+                'z0_minutes': z0,
+                'z1_minutes': z1,
+                'z2_minutes': z2,
+                'z3_minutes': z3,
+                'z4_z5_minutes': z4_z5,
+            }
+
+        logger.debug(
+            f"Bulk zone training cache: {len(result)}/{len(date_strings)} hits"
+        )
+        return result
+
+    def get_zone_training_day(self, date_str: str) -> Optional[Dict]:
+        """
+        Get cached zone training minutes for a specific date.
+
+        Args:
+            date_str: Date string in 'YYYY-MM-DD' format
+
+        Returns:
+            Dict with keys 'z_neg1_minutes', 'z0_minutes', 'z1_minutes', 'z2_minutes',
+            'z3_minutes', 'z4_z5_minutes', or None on miss.
+            Returns None for rows missing any of the zone columns (stale / pre-migration rows).
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                'SELECT z_neg1_minutes, z0_minutes, z1_minutes, z2_minutes, z3_minutes, z4_z5_minutes '
+                'FROM zone_training_cache WHERE date = ?',
+                (date_str,)
+            )
+            result = cursor.fetchone()
+
+        if result:
+            z_neg1, z0, z1, z2, z3, z4_z5 = result
+            # Treat rows missing any zone column (NULL = old schema) as a cache miss
+            if any(v is None for v in (z_neg1, z0, z1, z2, z3, z4_z5)):
+                logger.debug(f"Zone training cache STALE (missing zone columns) for {date_str}")
+                return None
+            logger.debug(f"Zone training cache HIT for {date_str}")
+            return {
+                'z_neg1_minutes': z_neg1,
+                'z0_minutes': z0,
+                'z1_minutes': z1,
+                'z2_minutes': z2,
+                'z3_minutes': z3,
+                'z4_z5_minutes': z4_z5,
+            }
+
+        logger.debug(f"Zone training cache MISS for {date_str}")
+        return None
+
+    def set_zone_training_day(
+        self,
+        date_str: str,
+        z_neg1_minutes: float,
+        z0_minutes: float,
+        z1_minutes: float,
+        z2_minutes: float,
+        z3_minutes: float,
+        z4_z5_minutes: float,
+    ) -> None:
+        """
+        Cache pre-computed zone training minutes for a specific date.
+        Historical data does not change, so no expiry is applied.
+
+        Args:
+            date_str: Date string in 'YYYY-MM-DD' format
+            z_neg1_minutes: Minutes spent in Zone -1 (Rest)
+            z0_minutes: Minutes spent in Zone 0 (Moving)
+            z1_minutes: Minutes spent in Zone 1 (Very Light)
+            z2_minutes: Minutes spent in Zone 2 (Light)
+            z3_minutes: Minutes spent in Zone 3 (Moderate)
+            z4_z5_minutes: Minutes spent in Zone 4+5 (Hard/Maximum)
+        """
+        # Do not cache today's data – it is still being accumulated
+        now = datetime.now()
+        if date_str == now.strftime('%Y-%m-%d'):
+            logger.debug(f"Skipping cache write for today ({date_str}) – data may be incomplete")
+            return
+
+        cached_at = now.isoformat()
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT OR REPLACE INTO zone_training_cache
+                    (date, z_neg1_minutes, z0_minutes, z1_minutes, z2_minutes, z3_minutes, z4_z5_minutes, cached_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (date_str, z_neg1_minutes, z0_minutes, z1_minutes, z2_minutes, z3_minutes, z4_z5_minutes, cached_at))
+            conn.commit()
+        logger.debug(
+            f"Cached zone training for {date_str} "
+            f"(Z-1={z_neg1_minutes:.1f}m, Z0={z0_minutes:.1f}m, Z1={z1_minutes:.1f}m, "
+            f"Z2={z2_minutes:.1f}m, Z3={z3_minutes:.1f}m, Z4+Z5={z4_z5_minutes:.1f}m)"
+        )
+
     def _delete_heart_rate_data(self, date: datetime) -> None:
         """Delete heart rate data for a specific date from both database and memory"""
         date_str = date.strftime('%Y-%m-%d')
@@ -407,6 +695,7 @@ class CacheManager:
             
             cursor.execute('DELETE FROM heart_rate_data')
             cursor.execute('DELETE FROM hrv_data')
+            cursor.execute('DELETE FROM zone_training_cache')
             
             conn.commit()
         
