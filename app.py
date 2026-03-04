@@ -349,6 +349,7 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
         showgrid=True,
         gridcolor='#E0E0E0',
         tickformat='%H:%M',
+        dtick=3600000,
         row=1, col=1
     )
     fig.update_yaxes(

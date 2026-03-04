@@ -97,7 +97,8 @@ def create_heart_rate_chart(data: List[Dict], output_file: str = 'heart_rate_cha
         xaxis=dict(
             showgrid=True,
             gridcolor='#E0E0E0',
-            tickformat='%H:%M'
+            tickformat='%H:%M',
+            dtick=3600000
         ),
         yaxis=dict(
             showgrid=True,
