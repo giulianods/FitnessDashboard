@@ -157,5 +157,35 @@ def test_memory_cache():
         shutil.rmtree(temp_dir)
         print("\nTest cleanup complete")
 
+
+def test_set_heart_rate_skips_today():
+    """set_heart_rate_data must not cache today's data (still accumulating)"""
+    temp_dir = tempfile.mkdtemp()
+    try:
+        cache = CacheManager(cache_dir=temp_dir)
+        today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        hr_data = [{'timestamp': today, 'heart_rate': 70}]
+        cache.set_heart_rate_data(today, hr_data)
+
+        result = cache.get_heart_rate_data(today)
+        assert result is None, "Today's HR data must not be cached"
+    finally:
+        shutil.rmtree(temp_dir)
+
+
+def test_set_hrv_skips_today():
+    """set_hrv_data must not cache today's data (still accumulating)"""
+    temp_dir = tempfile.mkdtemp()
+    try:
+        cache = CacheManager(cache_dir=temp_dir)
+        today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        cache.set_hrv_data(today, 55.0)
+
+        result = cache.get_hrv_data(today)
+        assert result is None, "Today's HRV data must not be cached"
+    finally:
+        shutil.rmtree(temp_dir)
+
+
 if __name__ == '__main__':
     test_memory_cache()
