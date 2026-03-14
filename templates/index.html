@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Fitness Dashboard - Heart Rate Viewer</title>
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <style>
         * {
             margin: 0;
@@ -44,17 +45,20 @@
             justify-content: center;
             cursor: pointer;
             transition: all 0.3s;
-            font-size: 24px;
+            font-size: 20px;
+            color: #BDC3C7;
             border: 3px solid transparent;
         }
         
         .menu-item:hover {
             background: #4A90E2;
+            color: white;
             transform: scale(1.1);
         }
         
         .menu-item.active {
             background: #4A90E2;
+            color: white;
             border-color: white;
         }
         
@@ -280,25 +284,22 @@
     <!-- Sidebar menu -->
     <div class="sidebar">
         <div class="menu-item active" onclick="switchView('daily', event)" title="Daily View">
-            ☀️
-        </div>
-        <div class="menu-item" onclick="switchView('weekly', event)" title="Weekly View">
-            📅
+            <i class="fa-solid fa-sun"></i>
         </div>
         <div class="menu-item" onclick="switchView('monthly', event)" title="Monthly View">
-            📆
+            <i class="fa-solid fa-calendar-days"></i>
         </div>
         <div class="menu-item" onclick="switchView('historical', event)" title="Historical Trends">
-            📈
+            <i class="fa-solid fa-chart-line"></i>
         </div>
         <div class="menu-item" onclick="switchView('zone-training', event)" title="Zone Training">
-            💪
+            <i class="fa-solid fa-heart-pulse"></i>
         </div>
         <div class="menu-item" onclick="switchView('zone-calendar', event)" title="Zone Calendar">
-            🗓️
+            <i class="fa-solid fa-calendar-check"></i>
         </div>
         <div class="menu-item" onclick="switchView('hr-histogram', event)" title="Daily HR Histograms">
-            📊
+            <i class="fa-solid fa-chart-bar"></i>
         </div>
     </div>
     
@@ -358,29 +359,6 @@
                     <div class="loading">
                         <div class="spinner"></div>
                         <p>Loading historical trends...</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Weekly View -->
-        <div id="weekly-view" class="view">
-            <div class="controls">
-                <div class="period-picker-container">
-                    <label>Select Week:</label>
-                    <div id="week-buttons">
-                        <!-- Week buttons will be generated dynamically -->
-                    </div>
-                </div>
-            </div>
-            
-            <div id="weekly-stats-container"></div>
-            
-            <div class="chart-container">
-                <div id="weekly-chart">
-                    <div class="loading">
-                        <div class="spinner"></div>
-                        <p>Select a week to view data...</p>
                     </div>
                 </div>
             </div>
@@ -478,10 +456,6 @@
             
             if (view === 'daily') {
                 document.getElementById('daily-view').classList.add('active');
-            } else if (view === 'weekly') {
-                document.getElementById('weekly-view').classList.add('active');
-                // Generate week buttons and load current week
-                generateWeekButtons();
             } else if (view === 'historical') {
                 document.getElementById('historical-view').classList.add('active');
                 // Load historical data without requiring event parameter
@@ -694,119 +668,6 @@
                 </div>
             `;
             document.getElementById('historical-stats-container').innerHTML = statsHtml;
-        }
-        
-        // Weekly view functions
-        function getISOWeek(date) {
-            // Calculate ISO week number (week starts on Monday)
-            const d = new Date(date);
-            d.setHours(0, 0, 0, 0);
-            // Thursday in current week decides the year
-            d.setDate(d.getDate() + 4 - (d.getDay() || 7));
-            const yearStart = new Date(d.getFullYear(), 0, 1);
-            const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
-            return [d.getFullYear(), weekNo];
-        }
-        
-        function generateWeekButtons() {
-            const weekButtonsContainer = document.getElementById('week-buttons');
-            const today = new Date();
-            let html = '';
-            
-            // Generate buttons for last 6 weeks (including current week)
-            for (let i = 0; i < 6; i++) {
-                const weekDate = new Date(today);
-                weekDate.setDate(weekDate.getDate() - (i * 7));
-                const [year, week] = getISOWeek(weekDate);
-                const yearShort = year.toString().slice(-2);
-                const label = `CW${week} '${yearShort}`;
-                const activeClass = i === 0 ? ' active' : '';
-                
-                html += `<button class="period-button${activeClass}" onclick="loadWeeklyData(${year}, ${week}, event)">${label}</button>`;
-            }
-            
-            weekButtonsContainer.innerHTML = html;
-            
-            // Load current week data
-            const [currentYear, currentWeek] = getISOWeek(today);
-            loadWeeklyDataInitial(currentYear, currentWeek);
-        }
-        
-        function loadWeeklyData(year, week, event) {
-            // Update active button
-            document.querySelectorAll('#week-buttons .period-button').forEach(btn => {
-                btn.classList.remove('active');
-            });
-            event.target.classList.add('active');
-            
-            loadWeeklyDataInitial(year, week);
-        }
-        
-        function loadWeeklyDataInitial(year, week) {
-            const chartDiv = document.getElementById('weekly-chart');
-            chartDiv.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading week data...</p></div>';
-            
-            fetch(`/get_weekly_data?year=${year}&week=${week}`)
-                .then(response => {
-                    if (!response.ok) {
-                        return response.json().then(err => {
-                            throw new Error(err.error || 'Failed to load data');
-                        });
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    // Parse chart JSON string
-                    const chartData = JSON.parse(data.chart);
-                    
-                    // Clear and display the chart
-                    chartDiv.innerHTML = '';
-                    Plotly.newPlot('weekly-chart', chartData.data, chartData.layout, {
-                        responsive: true,
-                        displayModeBar: true,
-                        displaylogo: false
-                    });
-                    
-                    // Display statistics
-                    displayWeeklyStats(data.stats);
-                })
-                .catch(error => {
-                    console.error('Error loading weekly data:', error);
-                    chartDiv.innerHTML = `
-                        <div class="error">
-                            <h3>⚠️ Error Loading Data</h3>
-                            <p>${error.message}</p>
-                        </div>
-                    `;
-                });
-        }
-        
-        function displayWeeklyStats(stats) {
-            const statsHtml = `
-                <div class="stats">
-                    <div class="stat-card">
-                        <h3>Average Heart Rate</h3>
-                        <p>${stats.average} bpm</p>
-                    </div>
-                    <div class="stat-card">
-                        <h3>Maximum Heart Rate</h3>
-                        <p>${stats.maximum} bpm</p>
-                    </div>
-                    <div class="stat-card">
-                        <h3>Minimum Heart Rate</h3>
-                        <p>${stats.minimum} bpm</p>
-                    </div>
-                    <div class="stat-card">
-                        <h3>Time in Z2</h3>
-                        <p>${stats.time_z2}</p>
-                    </div>
-                    <div class="stat-card">
-                        <h3>Time in Z4+5</h3>
-                        <p>${stats.time_z4_z5}</p>
-                    </div>
-                </div>
-            `;
-            document.getElementById('weekly-stats-container').innerHTML = statsHtml;
         }
         
         // Monthly view functions
