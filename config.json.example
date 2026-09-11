@@ -1,4 +1,35 @@
 {
     "email": "your_garmin_email@example.com",
-    "password": "your_garmin_password"
+    "password": "your_garmin_password",
+    "aerobic_base": {
+        "weekly_target_abm": 360,
+        "qualifying_session_minutes": 30,
+        "long_session_target": 120,
+        "primary_sport": "auto",
+        "eligible_activity_types": [
+            "cycling", "running", "swimming", "hiking", "walking",
+            "rowing", "indoor_rowing", "elliptical"
+        ],
+        "excluded_activity_types": ["strength_training", "strength", "cardio_strength"],
+        "heart_rate_zones": [95, 114, 133, 152, 171, 190],
+        "lt1_heart_rate": null,
+        "planned_weekly_targets": {
+            "2026-W40": {"target_abm": 240, "deload": true}
+        },
+        "warmup_trim_minutes": 10,
+        "cooldown_trim_minutes": 5,
+        "minimum_drift_duration_minutes": 60,
+        "minimum_efficiency_samples": 3,
+        "minimum_hr_coverage": 0.8,
+        "minimum_signal_coverage": 0.8,
+        "excellent_sensor_coverage": 0.95,
+        "sleep_goal_hours": 8,
+        "scoring_thresholds": {
+            "intensity": {"full": 0.8, "eight": 0.7, "five": 0.6},
+            "adherence": {"full_low": 0.9, "full_high": 1.1, "seven_low": 0.75, "seven_high": 1.2, "three_low": 0.6, "three_high": 1.3},
+            "drift": {"full": 3, "eight": 5, "five": 7.5, "two": 10},
+            "efficiency": {"full": 3, "eight": 1, "stable_low": -1, "three_low": -3},
+            "recovery": {"hrv_full": 0.9, "hrv_half": 0.8, "rhr_full_delta": 3, "rhr_half_delta": 5, "sleep_full": 0.9, "sleep_half": 0.8, "battery_full": 0.9, "battery_half": 0.75}
+        }
+    }
 }

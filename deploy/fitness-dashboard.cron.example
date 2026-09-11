@@ -1,0 +1,5 @@
+SHELL=/bin/bash
+CRON_TZ=Europe/Bucharest
+
+# Refresh at 04:15 Bucharest time. Replace both absolute paths before installing.
+15 4 * * * cd /absolute/path/to/FitnessDashboard && /absolute/path/to/FitnessDashboard/.venv/bin/python sync_aerobic_data.py >> data/sync.log 2>&1

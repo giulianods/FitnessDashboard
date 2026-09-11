@@ -4,6 +4,8 @@ A Python application that connects to your Garmin account, retrieves heart rate 
 
 ## Features
 
+- 🚴 **Aerobic Base Dashboard** - Explainable weekly 0–100 scoring for low-intensity volume, frequency, durability, efficiency, and recovery
+- 🗓️ **Daily Aerobic Calendar** - Year-to-date calendar colored by the transparent daily aerobic guide
 - 🔐 Secure authentication with Garmin Connect
 - 📊 Interactive heart rate line charts with Plotly
 - 🌐 **Web Interface** - Interactive date picker to view any day's data
@@ -60,6 +62,67 @@ python app.py
 Then open your browser and navigate to:
 ```
 http://localhost:5000
+```
+
+The Aerobic Base dashboard is the first view. Its first refresh imports the selected
+range from Garmin in bounded chunks and caches source and derived data in SQLite.
+Use the settings panel to inspect the active values; customize targets, eligible
+activities, HR zones, LT1, deload weeks, and thresholds in the `aerobic_base`
+section shown in `config.json.example`.
+
+### Persistent server and daily Garmin sync
+
+For an always-on installation, serve the Flask application with Gunicorn instead
+of the development server:
+
+```bash
+python -m venv .venv
+.venv/bin/pip install -r requirements.txt
+.venv/bin/gunicorn --workers 2 --threads 2 --timeout 120 \
+  --bind 127.0.0.1:5000 wsgi:app
+```
+
+`127.0.0.1` is appropriate behind a reverse proxy. Binding to `0.0.0.0:5000`
+exposes the dashboard to the network; the application does not provide login
+authentication, so use a firewall or an authenticated reverse proxy.
+
+An editable systemd unit is provided at
+`deploy/fitness-dashboard.service.example`. Replace its user, group, and absolute
+paths, copy it to `/etc/systemd/system/fitness-dashboard.service`, then run:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now fitness-dashboard
+curl http://127.0.0.1:5000/healthz
+```
+
+The daily updater is independent of the web process:
+
+```bash
+.venv/bin/python sync_aerobic_data.py
+```
+
+It backfills unchecked activity dates needed for the current-year calendar,
+imports any missing 35-day recovery baseline, force-refreshes the latest three
+days, warms the legacy HR/HRV caches, and recalculates the current dashboards.
+Runs are idempotent and protected by `data/aerobic_sync.lock` so overlapping cron
+jobs cannot run concurrently.
+
+To install the example cron schedule, edit the absolute paths in
+`deploy/fitness-dashboard.cron.example` and add it with `crontab -e`. It runs at
+04:15 in the Europe/Bucharest timezone and writes output to `data/sync.log`:
+
+```cron
+SHELL=/bin/bash
+CRON_TZ=Europe/Bucharest
+15 4 * * * cd /absolute/path/to/FitnessDashboard && /absolute/path/to/FitnessDashboard/.venv/bin/python sync_aerobic_data.py >> data/sync.log 2>&1
+```
+
+Useful sync options:
+
+```bash
+.venv/bin/python sync_aerobic_data.py --recent-days 5
+.venv/bin/python sync_aerobic_data.py --no-backfill
 ```
 
 **Features:**

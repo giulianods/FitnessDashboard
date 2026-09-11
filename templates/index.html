@@ -214,6 +214,106 @@
             height: 700px;
             flex-shrink: 0;
         }
+
+        /* Aerobic Base dashboard */
+        .aerobic-view { overflow-y: auto !important; background: #f4f7fb; color: #1f2937; }
+        .aerobic-shell { padding: 18px 24px 40px; width: 100%; max-width: 1800px; margin: 0 auto; }
+        .aerobic-toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 14px; background: white; border-radius: 12px; box-shadow: 0 1px 5px rgba(0,0,0,.08); position: sticky; top: 0; z-index: 20; }
+        .aerobic-toolbar h1 { font-size: 1.35rem; margin-right: auto; }
+        .aerobic-toolbar button, .aerobic-toolbar select, .aerobic-toolbar input { border: 1px solid #cbd5e1; background: white; color: #1f2937; border-radius: 7px; padding: 8px 10px; }
+        .aerobic-toolbar button { cursor: pointer; }
+        .aerobic-toolbar .primary { background: #2563eb; color: white; border-color: #2563eb; }
+        .import-status { width: 100%; font-size: .82rem; color: #64748b; min-height: 1.1rem; }
+        .daily-status-card { margin-top: 10px; padding: 10px 12px; background: white; border-radius: 12px; box-shadow: 0 1px 5px rgba(0,0,0,.08); overflow-x: auto; }
+        .daily-status-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; margin-bottom: 8px; font-size: .8rem; color: #64748b; }
+        .daily-status-heading strong { color: #1f2937; font-size: .9rem; }
+        .daily-status-legend { margin-left: auto; display: flex; gap: 10px; }
+        .daily-status-legend span::before { content: ''; display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 4px; background: var(--legend-color); }
+        .daily-status-grid { display: grid; grid-template-columns: repeat(7, minmax(90px, 1fr)); gap: 4px; min-width: 680px; }
+        .daily-status-segment { min-height: 64px; padding: 7px 9px; border-radius: 6px; color: white; display: grid; grid-template-columns: 1fr auto; gap: 2px 7px; align-items: center; }
+        .daily-status-segment.green { background: #168a45; }
+        .daily-status-segment.blue { background: #2878c8; }
+        .daily-status-segment.yellow { background: #e4b329; color: #352b0b; }
+        .daily-status-segment.neutral { background: #778597; }
+        .daily-status-day { font-weight: 700; }
+        .daily-status-score { font-size: 1.2rem; font-weight: 800; grid-row: span 2; }
+        .daily-status-detail { font-size: .72rem; opacity: .92; white-space: nowrap; }
+        .aerobic-calendar-view { overflow-y: auto !important; background: #f4f7fb; color: #1f2937; }
+        .calendar-year-grid { display: grid; grid-template-columns: repeat(3, minmax(280px, 1fr)); gap: 14px; margin-top: 14px; }
+        .calendar-month { background: white; border-radius: 12px; padding: 12px; box-shadow: 0 1px 5px rgba(0,0,0,.07); }
+        .calendar-month-header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 9px; }
+        .calendar-month-header h2 { font-size: 1rem; }
+        .calendar-month-meta { color: #64748b; font-size: .7rem; text-align: right; }
+        .calendar-days { display: grid; grid-template-columns: repeat(8, 1fr); gap: 3px; }
+        .calendar-weekday { text-align: center; font-size: .65rem; color: #64748b; padding-bottom: 3px; }
+        .calendar-weekday:nth-child(8) { margin-left: 6px; border-left: 1px solid #cbd5e1; }
+        .calendar-day { aspect-ratio: 1; border-radius: 5px; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 34px; font-size: .65rem; line-height: 1.05; color: white; }
+        .calendar-day strong { font-size: .75rem; }
+        .calendar-day.green { background: #168a45; }
+        .calendar-day.blue { background: #2878c8; }
+        .calendar-day.yellow { background: #e4b329; color: #352b0b; }
+        .calendar-day.neutral { background: #778597; }
+        .calendar-day.blank { background: transparent; }
+        .calendar-week-score { position: relative; aspect-ratio: 1; margin-left: 6px; border-radius: 5px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; font-size: .58rem; line-height: 1.05; border: 2px solid rgba(255,255,255,.42); box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); cursor: help; }
+        .calendar-week-score strong { font-size: .78rem; }
+        .calendar-week-score.green { background: #087f5b; }
+        .calendar-week-score.blue { background: #315bb5; }
+        .calendar-week-score.yellow { background: #d6a514; color: #352b0b; }
+        .calendar-week-score.orange { background: #d96b19; }
+        .calendar-week-score.red { background: #b93636; }
+        .calendar-week-tooltip { position: absolute; z-index: 100; bottom: calc(100% + 8px); right: -8px; width: 250px; padding: 10px 12px; border-radius: 8px; background: #172033; color: #f8fafc; box-shadow: 0 8px 24px rgba(0,0,0,.28); font-size: .76rem; line-height: 1.35; text-align: left; pointer-events: none; opacity: 0; visibility: hidden; transform: translateY(4px); transition: opacity .15s, transform .15s, visibility .15s; }
+        .calendar-week-tooltip::after { content: ''; position: absolute; top: 100%; right: 20px; border: 6px solid transparent; border-top-color: #172033; }
+        .calendar-week-tooltip strong { display: block; font-size: .78rem; margin-bottom: 4px; }
+        .calendar-week-tooltip small { display: block; color: #cbd5e1; margin-top: 6px; }
+        .calendar-week-score:hover .calendar-week-tooltip, .calendar-week-score:focus .calendar-week-tooltip { opacity: 1; visibility: visible; transform: translateY(0); }
+        .calendar-year-summary { grid-template-columns: repeat(4, minmax(160px, 1fr)); }
+        .summary-grid { display: grid; grid-template-columns: repeat(7, minmax(140px, 1fr)); gap: 12px; margin: 16px 0; }
+        .aerobic-card { background: white; border-radius: 12px; padding: 15px; box-shadow: 0 1px 5px rgba(0,0,0,.07); min-width: 0; }
+        .aerobic-card .label { color: #64748b; font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; }
+        .aerobic-card .value { font-size: 1.55rem; font-weight: 700; margin-top: 6px; }
+        .aerobic-card .subvalue { color: #64748b; font-size: .8rem; margin-top: 5px; }
+        .score-card { background: linear-gradient(135deg, #1d4ed8, #0f766e); color: white; }
+        .score-card .label, .score-card .subvalue { color: #dbeafe; }
+        .narrative { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+        .narrative strong { display: block; margin-bottom: 5px; }
+        .component-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+        .component-title { display: flex; justify-content: space-between; gap: 8px; font-weight: 700; }
+        .progress-track { height: 8px; background: #e2e8f0; border-radius: 8px; overflow: hidden; margin: 10px 0; }
+        .progress-fill { height: 100%; background: #16a34a; }
+        .progress-fill.unavailable { background: #94a3b8; }
+        .component-meta { font-size: .78rem; color: #64748b; margin-top: 5px; }
+        .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+        .chart-panel { background: white; border-radius: 12px; min-height: 390px; padding: 8px; box-shadow: 0 1px 5px rgba(0,0,0,.07); }
+        .chart-panel > div { width: 100%; height: 370px; }
+        .table-panel { margin-top: 16px; overflow-x: auto; }
+        .activity-table { width: 100%; border-collapse: collapse; font-size: .84rem; }
+        .activity-table th, .activity-table td { padding: 9px; border-bottom: 1px solid #e2e8f0; text-align: left; white-space: nowrap; }
+        .activity-table th { color: #475569; background: #f8fafc; position: sticky; top: 0; }
+        .warning-text { color: #b45309; white-space: normal !important; min-width: 180px; }
+        .settings-panel { display: none; margin-top: 12px; }
+        .settings-panel.open { display: block; }
+        .settings-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px 18px; font-size: .85rem; }
+        .settings-grid dt { color: #64748b; }
+        .settings-grid dd { font-weight: 600; margin-bottom: 7px; word-break: break-word; }
+        @media (max-width: 1200px) { .summary-grid { grid-template-columns: repeat(4, 1fr); } .component-grid { grid-template-columns: repeat(2, 1fr); } }
+        @media (max-width: 1100px) { .calendar-year-grid { grid-template-columns: repeat(2, minmax(260px, 1fr)); } }
+        @media (max-width: 760px) {
+            body { overflow: auto; } .sidebar { width: 56px; } .menu-item { width: 40px; height: 40px; }
+            .aerobic-shell { padding: 10px; } .aerobic-toolbar { position: static; }
+            .aerobic-toolbar h1 { width: 100%; }
+            .summary-grid, .component-grid, .narrative, .charts-grid, .settings-grid { grid-template-columns: 1fr; }
+            .calendar-year-grid, .calendar-year-summary { grid-template-columns: 1fr; }
+            .chart-panel { min-height: 330px; } .chart-panel > div { height: 310px; }
+        }
+        @media (prefers-color-scheme: dark) {
+            .aerobic-view { background: #0f172a; color: #e2e8f0; }
+            .aerobic-calendar-view { background: #0f172a; color: #e2e8f0; }
+            .aerobic-toolbar, .aerobic-card, .chart-panel, .daily-status-card, .calendar-month { background: #1e293b; color: #e2e8f0; }
+            .daily-status-heading strong { color: #e2e8f0; }
+            .aerobic-toolbar button, .aerobic-toolbar select, .aerobic-toolbar input { background: #0f172a; color: #e2e8f0; border-color: #475569; }
+            .progress-track { background: #334155; } .activity-table th { background: #0f172a; color: #cbd5e1; }
+            .activity-table th, .activity-table td { border-color: #334155; }
+        }
         
         .loading {
             text-align: center;
@@ -283,7 +383,13 @@
 <body>
     <!-- Sidebar menu -->
     <div class="sidebar">
-        <div class="menu-item active" onclick="switchView('daily', event)" title="Daily View">
+        <div class="menu-item active" onclick="switchView('aerobic-base', event)" title="Aerobic Base">
+            <i class="fa-solid fa-person-biking"></i>
+        </div>
+        <div class="menu-item" onclick="switchView('aerobic-calendar', event)" title="Daily Aerobic Calendar">
+            <i class="fa-solid fa-calendar-week"></i>
+        </div>
+        <div class="menu-item" onclick="switchView('daily', event)" title="Daily View">
             <i class="fa-solid fa-sun"></i>
         </div>
         <div class="menu-item" onclick="switchView('monthly', event)" title="Monthly View">
@@ -306,8 +412,89 @@
             <p>Interactive Heart Rate Visualization with Cardio Zones</p>
         </div>
         
+        <!-- Aerobic Base View -->
+        <div id="aerobic-base-view" class="view active aerobic-view">
+            <div class="aerobic-shell">
+                <div class="aerobic-toolbar">
+                    <h1>Aerobic Base</h1>
+                    <button onclick="shiftAerobicWeek(-1)" title="Previous week"><i class="fa-solid fa-chevron-left"></i></button>
+                    <input id="aerobic-week" type="week" value="{{ default_week }}" aria-label="Selected ISO week">
+                    <button onclick="shiftAerobicWeek(1)" title="Next week"><i class="fa-solid fa-chevron-right"></i></button>
+                    <select id="aerobic-range" aria-label="Trend range">
+                        <option value="4">4 weeks</option><option value="12">12 weeks</option>
+                        <option value="26">26 weeks</option><option value="52">52 weeks</option>
+                    </select>
+                    <select id="aerobic-sport" aria-label="Primary sport"><option value="auto">Sport: Auto</option></select>
+                    <button onclick="toggleAerobicSettings()"><i class="fa-solid fa-gear"></i> Settings</button>
+                    <button class="primary" id="aerobic-refresh" onclick="refreshAerobicData(false)"><i class="fa-solid fa-rotate"></i> Refresh</button>
+                    <div id="aerobic-import-status" class="import-status">Reading cached data…</div>
+                </div>
+                <div id="aerobic-daily-status" class="daily-status-card"></div>
+                <div id="aerobic-settings-panel" class="aerobic-card settings-panel"></div>
+                <div id="aerobic-summary" class="summary-grid"></div>
+                <div id="aerobic-narrative" class="narrative"></div>
+                <div id="aerobic-components" class="component-grid"></div>
+                <div class="charts-grid">
+                    <div class="chart-panel"><div id="ab-score-trend"></div></div>
+                    <div class="chart-panel"><div id="ab-component-trend"></div></div>
+                    <div class="chart-panel"><div id="ab-volume-trend"></div></div>
+                    <div class="chart-panel"><div id="ab-intensity-trend"></div></div>
+                    <div class="chart-panel"><div id="ab-long-trend"></div></div>
+                    <div class="chart-panel"><div id="ab-drift-trend"></div></div>
+                    <div class="chart-panel"><div id="ab-efficiency-trend"></div></div>
+                    <div class="chart-panel"><div id="ab-recovery-trend"></div></div>
+                </div>
+                <div class="aerobic-card table-panel">
+                    <h2 style="margin-bottom:10px">Contributing activities</h2>
+                    <table class="activity-table">
+                        <thead><tr><th>Date</th><th>Activity</th><th>Duration</th><th>Z1</th><th>Z2</th><th>ABM</th><th>Easy</th><th>Avg HR</th><th>Power / speed</th><th>Drift</th><th>Confidence</th><th>Warnings</th></tr></thead>
+                        <tbody id="aerobic-activity-rows"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Daily Aerobic Calendar View -->
+        <div id="aerobic-calendar-view" class="view aerobic-calendar-view">
+            <div class="aerobic-shell">
+                <div class="aerobic-toolbar">
+                    <h1>Daily Aerobic Calendar</h1>
+                    <button onclick="shiftAerobicCalendarYear(-1)" title="Previous year"><i class="fa-solid fa-chevron-left"></i></button>
+                    <input id="aerobic-calendar-year" type="number" min="2000" max="{{ current_year }}" value="{{ current_year }}" aria-label="Calendar year">
+                    <button onclick="shiftAerobicCalendarYear(1)" title="Next year"><i class="fa-solid fa-chevron-right"></i></button>
+                    <button class="primary" id="aerobic-calendar-refresh" onclick="refreshAerobicCalendar(false)"><i class="fa-solid fa-rotate"></i> Refresh missing dates</button>
+                    <div id="aerobic-calendar-import-status" class="import-status">Open this dashboard to load the calendar.</div>
+                </div>
+                <div class="daily-status-card">
+                    <div class="daily-status-heading">
+                        <strong>Daily score colors</strong>
+                        <span>Same guide as the weekly dashboard strip</span>
+                        <span class="daily-status-legend">
+                            <span style="--legend-color:#168a45">&gt;85</span>
+                            <span style="--legend-color:#2878c8">70–85</span>
+                            <span style="--legend-color:#e4b329">&lt;70</span>
+                            <span style="--legend-color:#778597">No aerobic activity</span>
+                        </span>
+                    </div>
+                    <div class="daily-status-heading" style="margin-bottom:0">
+                        <strong>Weekly score badges</strong>
+                        <span>The outlined eighth cell summarizes each Monday–Sunday week</span>
+                        <span class="daily-status-legend">
+                            <span style="--legend-color:#087f5b">≥90</span>
+                            <span style="--legend-color:#315bb5">≥75</span>
+                            <span style="--legend-color:#d6a514">≥60</span>
+                            <span style="--legend-color:#d96b19">≥45</span>
+                            <span style="--legend-color:#b93636">&lt;45</span>
+                        </span>
+                    </div>
+                </div>
+                <div id="aerobic-calendar-summary" class="summary-grid calendar-year-summary"></div>
+                <div id="aerobic-calendar-months" class="calendar-year-grid"></div>
+            </div>
+        </div>
+
         <!-- Daily View -->
-        <div id="daily-view" class="view active">
+        <div id="daily-view" class="view">
             <div class="controls">
                 <div class="date-picker-container">
                     <label for="date-picker">Select Date:</label>
@@ -412,12 +599,20 @@
     
     <script>
         // Current view state
-        let currentView = 'daily';
+        let currentView = 'aerobic-base';
         let currentWeeks = 4;
+        let aerobicData = null;
+        let aerobicAutoRefreshAttempted = false;
+        let aerobicCalendarData = null;
+        const aerobicCalendarAutoRefreshAttempted = new Set();
         
         // Load data on page load with default date
         window.addEventListener('DOMContentLoaded', function() {
-            loadHeartRateData();
+            document.getElementById('aerobic-week').addEventListener('change', () => loadAerobicBaseData(false));
+            document.getElementById('aerobic-range').addEventListener('change', () => loadAerobicBaseData(false));
+            document.getElementById('aerobic-sport').addEventListener('change', () => loadAerobicBaseData(false));
+            document.getElementById('aerobic-calendar-year').addEventListener('change', () => loadAerobicCalendarData(true));
+            loadAerobicBaseData(true);
         });
         
         // Auto-load data when date is changed
@@ -440,7 +635,13 @@
                 v.classList.remove('active');
             });
             
-            if (view === 'daily') {
+            if (view === 'aerobic-base') {
+                document.getElementById('aerobic-base-view').classList.add('active');
+                loadAerobicBaseData(false);
+            } else if (view === 'aerobic-calendar') {
+                document.getElementById('aerobic-calendar-view').classList.add('active');
+                loadAerobicCalendarData(true);
+            } else if (view === 'daily') {
                 document.getElementById('daily-view').classList.add('active');
             } else if (view === 'historical') {
                 document.getElementById('historical-view').classList.add('active');
@@ -458,6 +659,433 @@
                 document.getElementById('zone-calendar-view').classList.add('active');
                 loadZoneCalendarData();
             }
+        }
+
+        const aerobicPlotConfig = {responsive: true, displayModeBar: false, displaylogo: false};
+        const aerobicColors = ['#2563eb','#0891b2','#16a34a','#84cc16','#eab308','#f97316','#dc2626','#7c3aed'];
+
+        function escapeHtml(value) {
+            return String(value ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+        }
+
+        function isoWeekMonday(weekValue) {
+            const match = /^(\d{4})-W(\d{2})$/.exec(weekValue);
+            if (!match) return new Date();
+            const year = Number(match[1]), week = Number(match[2]);
+            const jan4 = new Date(Date.UTC(year, 0, 4));
+            const jan4Day = jan4.getUTCDay() || 7;
+            const monday = new Date(jan4);
+            monday.setUTCDate(jan4.getUTCDate() - jan4Day + 1 + (week - 1) * 7);
+            return monday;
+        }
+
+        function dateToIsoWeek(value) {
+            const d = new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
+            const day = d.getUTCDay() || 7;
+            d.setUTCDate(d.getUTCDate() + 4 - day);
+            const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+            const week = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+            return `${d.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
+        }
+
+        function shiftAerobicWeek(offset) {
+            const input = document.getElementById('aerobic-week');
+            const monday = isoWeekMonday(input.value);
+            monday.setUTCDate(monday.getUTCDate() + offset * 7);
+            const candidate = dateToIsoWeek(monday);
+            const nowWeek = dateToIsoWeek(new Date());
+            if (candidate <= nowWeek) {
+                input.value = candidate;
+                loadAerobicBaseData(false);
+            }
+        }
+
+        function aerobicLayout(title, yTitle = '', extra = {}) {
+            const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            return Object.assign({
+                title: {text: title, font: {size: 16}}, margin: {l: 55, r: 25, t: 50, b: 55},
+                paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+                font: {color: dark ? '#e2e8f0' : '#334155'},
+                xaxis: {gridcolor: dark ? '#334155' : '#e2e8f0'},
+                yaxis: {title: yTitle, gridcolor: dark ? '#334155' : '#e2e8f0'},
+                legend: {orientation: 'h', y: -0.2}, hovermode: 'x unified'
+            }, extra);
+        }
+
+        function componentById(week, id) {
+            return week.components.find(c => c.identifier === id);
+        }
+
+        function scheduledSyncText(sync) {
+            if (!sync) return 'No scheduled sync has run yet';
+            const finished = new Date(sync.finished_at).toLocaleString();
+            return `Last scheduled sync: ${finished} (${sync.status})`;
+        }
+
+        async function loadAerobicBaseData(autoRefresh) {
+            const status = document.getElementById('aerobic-import-status');
+            const week = document.getElementById('aerobic-week').value;
+            const range = document.getElementById('aerobic-range').value;
+            const sport = document.getElementById('aerobic-sport').value;
+            status.textContent = 'Calculating from cached Garmin data…';
+            try {
+                const response = await fetch(`/get_aerobic_base_data?week=${encodeURIComponent(week)}&range=${range}&sport=${encodeURIComponent(sport)}`);
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Unable to load dashboard');
+                aerobicData = data;
+                populateAerobicSportSelector(data.settings);
+                renderAerobicDashboard(data);
+                status.textContent = `Cached source: ${data.import_status.activity_count} activities, ${data.import_status.wellness_days} wellness days (${data.import_status.wellness_percent}%). · ${scheduledSyncText(data.scheduled_sync)}`;
+                if (autoRefresh && !aerobicAutoRefreshAttempted && data.import_status.wellness_percent < 90) {
+                    aerobicAutoRefreshAttempted = true;
+                    await refreshAerobicData(true);
+                }
+            } catch (error) {
+                status.textContent = `Error: ${error.message}`;
+                document.getElementById('aerobic-summary').innerHTML = `<div class="aerobic-card"><strong>Unable to load Aerobic Base</strong><div class="subvalue">${escapeHtml(error.message)}</div></div>`;
+            }
+        }
+
+        function populateAerobicSportSelector(settings) {
+            const select = document.getElementById('aerobic-sport');
+            const current = select.value;
+            const existing = new Set(Array.from(select.options).map(o => o.value));
+            settings.eligible_activity_types.forEach(sport => {
+                if (!existing.has(sport)) select.add(new Option(`Sport: ${sport.replaceAll('_',' ')}`, sport));
+            });
+            if (Array.from(select.options).some(o => o.value === current)) select.value = current;
+        }
+
+        async function refreshAerobicData(automatic = false) {
+            const button = document.getElementById('aerobic-refresh');
+            const status = document.getElementById('aerobic-import-status');
+            const monday = isoWeekMonday(document.getElementById('aerobic-week').value);
+            const rangeWeeks = Number(document.getElementById('aerobic-range').value);
+            const start = new Date(monday);
+            start.setUTCDate(start.getUTCDate() - (rangeWeeks - 1) * 7 - 56);
+            const end = new Date(monday);
+            end.setUTCDate(end.getUTCDate() + 6);
+            const today = new Date();
+            const todayUtc = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
+            if (end > todayUtc) end.setTime(todayUtc.getTime());
+            button.disabled = true;
+            try {
+                const chunks = [];
+                let cursor = new Date(start);
+                while (cursor <= end) {
+                    const chunkEnd = new Date(cursor);
+                    chunkEnd.setUTCDate(chunkEnd.getUTCDate() + 27);
+                    if (chunkEnd > end) chunkEnd.setTime(end.getTime());
+                    chunks.push([new Date(cursor), new Date(chunkEnd)]);
+                    cursor = new Date(chunkEnd);
+                    cursor.setUTCDate(cursor.getUTCDate() + 1);
+                }
+                for (let i = 0; i < chunks.length; i++) {
+                    const [chunkStart, chunkEnd] = chunks[i];
+                    status.textContent = `Importing Garmin data ${i + 1}/${chunks.length}: ${chunkStart.toISOString().slice(0,10)} – ${chunkEnd.toISOString().slice(0,10)}…`;
+                    const response = await fetch('/refresh_aerobic_base_data', {
+                        method: 'POST', headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({start: chunkStart.toISOString().slice(0,10), end: chunkEnd.toISOString().slice(0,10)})
+                    });
+                    const result = await response.json();
+                    if (!response.ok) throw new Error(result.error || 'Import failed');
+                }
+                status.textContent = 'Import complete; recalculating scores…';
+                await loadAerobicBaseData(false);
+            } catch (error) {
+                status.textContent = `${automatic ? 'Automatic import' : 'Refresh'} failed: ${error.message}`;
+            } finally {
+                button.disabled = false;
+            }
+        }
+
+        function toggleAerobicSettings() {
+            document.getElementById('aerobic-settings-panel').classList.toggle('open');
+        }
+
+        function renderAerobicDashboard(data) {
+            const selected = data.selected;
+            const volume = componentById(selected, 'volume');
+            const longSession = componentById(selected, 'long_session');
+            const drift = componentById(selected, 'durability');
+            const recovery = componentById(selected, 'recovery');
+            document.getElementById('aerobic-summary').innerHTML = `
+                <div class="aerobic-card score-card"><div class="label">Aerobic Base Score</div><div class="value">${selected.normalized_score}/100</div><div class="subvalue">${escapeHtml(selected.status)}${selected.provisional ? ' · Provisional' : ''}</div></div>
+                <div class="aerobic-card"><div class="label">Data coverage</div><div class="value">${selected.data_coverage}%</div><div class="subvalue">${selected.missing.length ? `Missing: ${escapeHtml(selected.missing.join(', '))}` : 'All components available'}</div></div>
+                <div class="aerobic-card"><div class="label">ABM / target</div><div class="value">${volume.raw_value.abm.toFixed(0)} / ${volume.raw_value.target.toFixed(0)}</div><div class="subvalue">Z1 ${volume.raw_value.zone1_minutes.toFixed(0)} · Z2 ${volume.raw_value.zone2_minutes.toFixed(0)}</div></div>
+                <div class="aerobic-card"><div class="label">Longest easy session</div><div class="value">${longSession.raw_value.longest_base_minutes.toFixed(0)} min</div><div class="subvalue">Target ${longSession.raw_value.target.toFixed(0)} min</div></div>
+                <div class="aerobic-card"><div class="label">Cardiac drift</div><div class="value">${drift.availability ? drift.raw_value.median_decoupling_percent.toFixed(1) + '%' : 'Unavailable'}</div><div class="subvalue">${escapeHtml(drift.confidence)} confidence</div></div>
+                <div class="aerobic-card"><div class="label">Recovery</div><div class="value">${recovery.availability ? recovery.earned_points.toFixed(1) + '/10' : 'Unavailable'}</div><div class="subvalue">${escapeHtml(recovery.explanation)}</div></div>
+                <div class="aerobic-card"><div class="label">Primary sport</div><div class="value" style="text-transform:capitalize">${escapeHtml(selected.primary_sport.replaceAll('_',' '))}</div><div class="subvalue">Auto-selected by ABM unless overridden</div></div>`;
+            document.getElementById('aerobic-narrative').innerHTML = `
+                <div class="aerobic-card"><strong>What shaped the score</strong>${escapeHtml(selected.explanation)}</div>
+                <div class="aerobic-card"><strong>Recommended next step</strong>${escapeHtml(selected.recommendation)}</div>`;
+            renderDailyAerobicStatus(selected.daily_statuses);
+            renderAerobicComponents(selected.components);
+            renderAerobicSettings(data.settings);
+            renderAerobicActivityTable(selected.activities);
+            renderAerobicCharts(data);
+        }
+
+        function renderDailyAerobicStatus(days) {
+            const container = document.getElementById('aerobic-daily-status');
+            const target = days.length ? days[0].daily_target_abm : 0;
+            container.innerHTML = `
+                <div class="daily-status-heading">
+                    <strong>Daily Aerobic Status</strong>
+                    <span>Guide: ${target.toFixed(0)} ABM/day across five qualifying days · does not alter the weekly score</span>
+                    <span class="daily-status-legend">
+                        <span style="--legend-color:#168a45">&gt;85</span>
+                        <span style="--legend-color:#2878c8">70–85</span>
+                        <span style="--legend-color:#e4b329">&lt;70</span>
+                        <span style="--legend-color:#778597">No aerobic activity</span>
+                    </span>
+                </div>
+                <div class="daily-status-grid">${days.map(day => {
+                    const score = day.score == null ? '—' : Math.round(day.score);
+                    const detail = day.score == null ? day.label : `${day.abm.toFixed(0)} ABM · ${day.easy_proportion == null ? '—' : Math.round(day.easy_proportion*100)+'%'} easy`;
+                    return `<div class="daily-status-segment ${day.band}" title="${escapeHtml(day.explanation)}" aria-label="${escapeHtml(`${day.day} ${day.date}: ${day.label}${day.score == null ? '' : `, score ${day.score}`}`)}">
+                        <span class="daily-status-day">${escapeHtml(day.day)} · ${escapeHtml(day.date.slice(5))}</span>
+                        <span class="daily-status-score">${score}</span>
+                        <span class="daily-status-detail">${escapeHtml(detail)}</span>
+                    </div>`;
+                }).join('')}</div>`;
+        }
+
+        function shiftAerobicCalendarYear(offset) {
+            const input = document.getElementById('aerobic-calendar-year');
+            const next = Math.max(Number(input.min), Math.min(Number(input.max), Number(input.value) + offset));
+            if (next !== Number(input.value)) {
+                input.value = next;
+                loadAerobicCalendarData(true);
+            }
+        }
+
+        async function loadAerobicCalendarData(autoRefresh) {
+            const year = Number(document.getElementById('aerobic-calendar-year').value);
+            const status = document.getElementById('aerobic-calendar-import-status');
+            status.textContent = `Building the ${year} calendar from cached activities…`;
+            try {
+                const response = await fetch(`/get_aerobic_calendar_data?year=${year}`);
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Unable to load calendar');
+                aerobicCalendarData = data;
+                renderAerobicCalendar(data);
+                status.textContent = `${data.import_status.imported_days}/${data.import_status.expected_days} source dates checked with Garmin (${data.import_status.coverage_percent}%). · ${scheduledSyncText(data.scheduled_sync)}`;
+                if (autoRefresh && data.import_status.missing_ranges.length && !aerobicCalendarAutoRefreshAttempted.has(year)) {
+                    aerobicCalendarAutoRefreshAttempted.add(year);
+                    await refreshAerobicCalendar(true);
+                }
+            } catch (error) {
+                status.textContent = `Error: ${error.message}`;
+                document.getElementById('aerobic-calendar-months').innerHTML = `<div class="aerobic-card"><strong>Unable to load calendar</strong><div class="subvalue">${escapeHtml(error.message)}</div></div>`;
+            }
+        }
+
+        async function refreshAerobicCalendar(automatic = false) {
+            const year = Number(document.getElementById('aerobic-calendar-year').value);
+            const button = document.getElementById('aerobic-calendar-refresh');
+            const status = document.getElementById('aerobic-calendar-import-status');
+            if (!aerobicCalendarData || aerobicCalendarData.year !== year) {
+                await loadAerobicCalendarData(false);
+            }
+            const ranges = aerobicCalendarData?.import_status?.missing_ranges || [];
+            if (!ranges.length) {
+                status.textContent = `${year} is fully checked with Garmin.`;
+                return;
+            }
+            button.disabled = true;
+            try {
+                for (let index = 0; index < ranges.length; index++) {
+                    const range = ranges[index];
+                    status.textContent = `Checking Garmin activity dates ${index + 1}/${ranges.length}: ${range.start} – ${range.end}…`;
+                    const response = await fetch('/refresh_aerobic_base_data', {
+                        method: 'POST', headers: {'Content-Type':'application/json'},
+                        body: JSON.stringify({start:range.start, end:range.end, include_wellness:false})
+                    });
+                    const result = await response.json();
+                    if (!response.ok) throw new Error(result.error || 'Calendar import failed');
+                }
+                status.textContent = 'Activity import complete; rebuilding calendar…';
+                await loadAerobicCalendarData(false);
+            } catch (error) {
+                status.textContent = `${automatic ? 'Automatic calendar import' : 'Calendar refresh'} failed: ${error.message}`;
+            } finally {
+                button.disabled = false;
+            }
+        }
+
+        function renderAerobicCalendar(data) {
+            const summary = data.summary;
+            document.getElementById('aerobic-calendar-summary').innerHTML = `
+                <div class="aerobic-card"><div class="label">Period</div><div class="value">${escapeHtml(data.start.slice(5))} – ${escapeHtml(data.end.slice(5))}</div><div class="subvalue">${data.year} year to date</div></div>
+                <div class="aerobic-card"><div class="label">Training-day average</div><div class="value">${summary.average_training_day_score == null ? '—' : summary.average_training_day_score.toFixed(1)}</div><div class="subvalue">Neutral days excluded</div></div>
+                <div class="aerobic-card"><div class="label">Aerobic-base volume</div><div class="value">${summary.total_abm.toFixed(0)} ABM</div><div class="subvalue">${summary.training_days} eligible training days</div></div>
+                <div class="aerobic-card"><div class="label">Strong days</div><div class="value">${summary.strong_days}</div><div class="subvalue">Daily guide score above 85</div></div>`;
+            const byDate = new Map(data.days.map(day => [day.date, day]));
+            const byWeek = new Map(data.weeks.map(week => [week.week, week]));
+            document.getElementById('aerobic-calendar-months').innerHTML = data.months.map(month => {
+                const first = new Date(Date.UTC(data.year, month.month - 1, 1));
+                const firstMonday = new Date(first);
+                firstMonday.setUTCDate(first.getUTCDate() - ((first.getUTCDay() + 6) % 7));
+                const last = new Date(Date.UTC(data.year, month.month, 0));
+                const cells = [];
+                let weekCursor = new Date(firstMonday);
+                while (weekCursor <= last) {
+                    for (let offset = 0; offset < 7; offset++) {
+                        const cellDate = new Date(weekCursor);
+                        cellDate.setUTCDate(cellDate.getUTCDate() + offset);
+                        const inMonth = cellDate.getUTCFullYear() === data.year && cellDate.getUTCMonth() === month.month - 1;
+                        const dateValue = cellDate.toISOString().slice(0,10);
+                        const day = inMonth ? byDate.get(dateValue) : null;
+                        if (!day) {
+                            cells.push('<div class="calendar-day blank"></div>');
+                        } else {
+                            const score = day.score == null ? '—' : Math.round(day.score);
+                            const dayTooltip = `${dateValue}: ${day.activity_minutes.toFixed(0)} minutes`;
+                            cells.push(`<div class="calendar-day ${day.band}" title="${escapeHtml(dayTooltip)}" aria-label="${escapeHtml(`${dateValue}, ${day.activity_minutes.toFixed(0)} activity minutes, ${day.label}${day.score == null ? '' : `, score ${day.score}`}`)}"><span>${cellDate.getUTCDate()}</span><strong>${score}</strong></div>`);
+                        }
+                    }
+                    const weekKey = dateToIsoWeek(weekCursor);
+                    const weekly = byWeek.get(weekKey);
+                    if (weekly) {
+                        const band = weekly.score >= 90 ? 'green' : weekly.score >= 75 ? 'blue' : weekly.score >= 60 ? 'yellow' : weekly.score >= 45 ? 'orange' : 'red';
+                        const weekNumber = weekKey.split('-W')[1];
+                        const accessibilityText = `${weekKey}: ${weekly.score}/100. What shaped the score: ${weekly.explanation}. Data coverage ${weekly.coverage}%.`;
+                        cells.push(`<div class="calendar-week-score ${band}" tabindex="0" aria-label="${escapeHtml(accessibilityText)}"><span>W${weekNumber}</span><strong>${Math.round(weekly.score)}</strong><div class="calendar-week-tooltip">${escapeHtml(weekly.explanation)}<small>${escapeHtml(`${weekly.score}/100 · ${weekly.status} · ${weekly.coverage}% coverage`)}${weekly.missing.length ? `<br>Missing: ${escapeHtml(weekly.missing.join(', '))}` : ''}</small></div></div>`);
+                    } else {
+                        cells.push('<div class="calendar-day blank"></div>');
+                    }
+                    weekCursor.setUTCDate(weekCursor.getUTCDate() + 7);
+                }
+                const weekdays = ['M','T','W','T','F','S','S','Wk'].map(day => `<div class="calendar-weekday">${day}</div>`).join('');
+                return `<section class="calendar-month"><div class="calendar-month-header"><h2>${escapeHtml(month.name)}</h2><div class="calendar-month-meta">${month.total_abm.toFixed(0)} ABM · ${month.training_days} days<br>${month.average_training_day_score == null ? 'No scored days' : `Avg ${month.average_training_day_score.toFixed(1)}`}</div></div><div class="calendar-days">${weekdays}${cells.join('')}</div></section>`;
+            }).join('');
+        }
+
+        function renderAerobicComponents(components) {
+            document.getElementById('aerobic-components').innerHTML = components.map(component => {
+                const percent = component.availability ? 100 * component.earned_points / component.maximum_points : 0;
+                return `<div class="aerobic-card">
+                    <div class="component-title"><span>${escapeHtml(component.name)}</span><span>${component.availability ? component.earned_points.toFixed(1) : '—'}/${component.maximum_points}</span></div>
+                    <div class="progress-track"><div class="progress-fill ${component.availability ? '' : 'unavailable'}" style="width:${percent}%"></div></div>
+                    <div>${escapeHtml(component.explanation)}</div>
+                    <div class="component-meta">${escapeHtml(component.confidence)} confidence${component.warnings.length ? ` · ⚠ ${escapeHtml(component.warnings.join(' '))}` : ''}</div></div>`;
+            }).join('');
+        }
+
+        function renderAerobicSettings(settings) {
+            const panel = document.getElementById('aerobic-settings-panel');
+            panel.innerHTML = `<h2 style="margin-bottom:8px">Effective settings</h2><p class="component-meta" style="margin-bottom:12px">Read-only. Edit the <code>aerobic_base</code> section in config.json, then refresh.</p>
+                <dl class="settings-grid">
+                    <div><dt>Weekly target</dt><dd>${settings.weekly_target_abm} ABM</dd></div>
+                    <div><dt>Qualifying session</dt><dd>${settings.qualifying_session_minutes} min</dd></div>
+                    <div><dt>Long-session target</dt><dd>${settings.long_session_target} min</dd></div>
+                    <div><dt>Drift minimum</dt><dd>${settings.minimum_drift_duration_minutes} min</dd></div>
+                    <div><dt>Warm-up / cooldown trim</dt><dd>${settings.warmup_trim_minutes} / ${settings.cooldown_trim_minutes} min</dd></div>
+                    <div><dt>LT1 boundary</dt><dd>${settings.lt1_heart_rate ?? 'Not set; Z1+Z2 used'}</dd></div>
+                    <div><dt>HR zone boundaries</dt><dd>${settings.heart_rate_zones.join(', ')} bpm</dd></div>
+                    <div><dt>Eligible activities</dt><dd>${settings.eligible_activity_types.join(', ')}</dd></div>
+                </dl>`;
+        }
+
+        function renderAerobicActivityTable(activities) {
+            const rows = document.getElementById('aerobic-activity-rows');
+            if (!activities.length) {
+                rows.innerHTML = '<tr><td colspan="12">No eligible activities are cached for this week. Use Refresh to import Garmin data.</td></tr>';
+                return;
+            }
+            rows.innerHTML = activities.map(a => {
+                const signal = a.average_power != null ? `${a.average_power.toFixed(0)} W` : a.average_speed != null ? `${(a.average_speed * 3.6).toFixed(1)} km/h` : '—';
+                const drift = a.drift ? `${a.drift.decoupling_percent.toFixed(1)}%${a.drift.proxy ? ' proxy' : ''}` : '—';
+                return `<tr><td>${escapeHtml(a.start_local.slice(0,10))}</td>
+                    <td>${escapeHtml(a.activity_type.replaceAll('_',' '))}</td><td>${a.moving_minutes.toFixed(0)} min</td>
+                    <td>${a.zone1_minutes.toFixed(0)}</td><td>${a.zone2_minutes.toFixed(0)}</td><td>${a.base_minutes.toFixed(1)}</td>
+                    <td>${a.easy_proportion == null ? '—' : (100*a.easy_proportion).toFixed(0)+'%'}</td><td>${a.average_hr == null ? '—' : a.average_hr.toFixed(0)}</td>
+                    <td>${signal}</td><td>${drift}</td><td>${a.drift ? escapeHtml(a.drift.confidence) : '—'}</td><td class="warning-text">${escapeHtml(a.warnings.join(' '))}</td></tr>`;
+            }).join('');
+        }
+
+        function renderAerobicCharts(data) {
+            const weeks = data.weeks, labels = weeks.map(w => w.week);
+            Plotly.react('ab-score-trend', [
+                {x: labels, y: weeks.map(w => w.normalized_score), name: 'Score', mode: 'lines+markers', line: {color:'#2563eb', width:3}},
+                {x: labels, y: weeks.map(w => w.data_coverage), name: 'Coverage', type:'bar', opacity:.22, marker:{color:'#64748b'}, yaxis:'y2'}
+            ], aerobicLayout('Aerobic Base Score trend', 'Score', {yaxis:{range:[0,100], title:'Score'}, yaxis2:{range:[0,100], title:'Coverage %', overlaying:'y', side:'right', showgrid:false}, barmode:'overlay'}), aerobicPlotConfig);
+
+            const ids = ['volume','frequency','long_session','intensity','adherence','durability','efficiency','recovery'];
+            Plotly.react('ab-component-trend', ids.map((id, index) => ({x:labels, y:weeks.map(w => {const c=componentById(w,id); return c.availability ? c.earned_points : 0}), name:id.replaceAll('_',' '), type:'bar', marker:{color:aerobicColors[index]}})), aerobicLayout('Score-component breakdown', 'Points', {barmode:'stack'}), aerobicPlotConfig);
+
+            Plotly.react('ab-volume-trend', [
+                {x:labels,y:weeks.map(w=>componentById(w,'volume').raw_value.zone1_minutes),name:'Zone 1',type:'bar',marker:{color:'#38bdf8'}},
+                {x:labels,y:weeks.map(w=>componentById(w,'volume').raw_value.zone2_minutes),name:'Zone 2',type:'bar',marker:{color:'#22c55e'}},
+                {x:labels,y:weeks.map(w=>componentById(w,'volume').raw_value.abm),name:'ABM',mode:'lines+markers',line:{color:'#7c3aed'}},
+                {x:labels,y:weeks.map(w=>componentById(w,'volume').raw_value.target),name:'Target',mode:'lines',line:{color:'#ef4444',dash:'dash'}}
+            ], aerobicLayout('Weekly aerobic volume', 'Minutes', {barmode:'stack'}), aerobicPlotConfig);
+
+            const zones = ['Z1','Z2','Z3','Z4','Z5'];
+            const intensityTraces = zones.map((zone,index)=>({x:labels,y:weeks.map(w=>{const totals=Object.fromEntries(zones.map(z=>[z,w.activities.reduce((s,a)=>s+(a.zone_minutes[z]||0),0)])); const all=Object.values(totals).reduce((a,b)=>a+b,0); return all ? 100*totals[zone]/all : 0}),name:zone,type:'bar',marker:{color:['#38bdf8','#22c55e','#a3e635','#f59e0b','#ef4444'][index]}}));
+            intensityTraces.push({x:labels,y:data.all_recorded_minutes.map(item=>item.minutes),name:'All recorded activity minutes',mode:'lines+markers',yaxis:'y2',line:{color:'#7c3aed',dash:'dot'}});
+            Plotly.react('ab-intensity-trend', intensityTraces, aerobicLayout('Intensity distribution · eligible endurance vs all recorded', '% of zoned eligible time', {barmode:'stack',yaxis:{range:[0,100],title:'Eligible zoned %'},yaxis2:{title:'All activity min',overlaying:'y',side:'right',showgrid:false}}), aerobicPlotConfig);
+
+            Plotly.react('ab-long-trend',[{x:labels,y:weeks.map(w=>componentById(w,'long_session').raw_value.longest_base_minutes),name:'Longest easy session',mode:'lines+markers',line:{color:'#0891b2'}},{x:labels,y:weeks.map(w=>componentById(w,'long_session').raw_value.target),name:'Target',mode:'lines',line:{color:'#ef4444',dash:'dash'}}],aerobicLayout('Long-session progression','Base minutes'),aerobicPlotConfig);
+
+            Plotly.react('ab-drift-trend',[{x:data.drift_sessions.map(s=>s.date),y:data.drift_sessions.map(s=>s.decoupling_percent),customdata:data.drift_sessions.map(s=>[s.sport,s.duration_minutes,s.measurement_type,s.confidence,s.activity_id]),name:'Decoupling',mode:'markers',marker:{size:10,color:data.drift_sessions.map(s=>s.proxy?'#f59e0b':'#2563eb')},hovertemplate:'%{x}<br>%{y:.1f}%<br>%{customdata[0]} · %{customdata[1]:.0f} min<br>%{customdata[2]} · %{customdata[3]}<extra></extra>'},{x:labels.length?[labels[0],labels[labels.length-1]]:[],y:[5,5],name:'5% reference',mode:'lines',line:{color:'#ef4444',dash:'dash'}}],aerobicLayout('Cardiac-drift trend','Decoupling %'),aerobicPlotConfig);
+
+            renderEfficiencyChart(data.efficiency_sessions);
+            renderRecoveryChart(data.recovery_trends);
+        }
+
+        function renderEfficiencyChart(sessions) {
+            const groups = {};
+            sessions.forEach(s => { const key=`${s.sport} · ${s.measurement_type}`; (groups[key] ||= []).push(s); });
+            const traces=[];
+            const groupEntries = Object.entries(groups);
+            const groupMeta = [];
+            groupEntries.forEach(([name,items],index)=>{
+                items.sort((a,b)=>a.date.localeCompare(b.date));
+                const speedBased = items[0].measurement_type === 'speed_hr';
+                // Garmin supplies speed in m/s.  Per-100-bpm values are easier to
+                // interpret while remaining a direct linear presentation of speed/HR.
+                const scale = speedBased ? 360 : 1;
+                const unit = speedBased ? 'km/h per 100 bpm' : 'W/bpm';
+                const label = `${items[0].sport.replaceAll('_',' ')} · ${speedBased ? 'speed/HR proxy' : 'power/HR'}`;
+                const visible = index === 0;
+                const values = items.map(i => i.value * scale);
+                traces.push({x:items.map(i=>i.date),y:values,name:'Sessions',mode:'markers',visible,
+                    marker:{color:aerobicColors[index%aerobicColors.length],size:9},
+                    customdata:items.map(i=>[i.qualifying_minutes,i.proxy?'Proxy':'Power-based']),
+                    hovertemplate:`%{x}<br>Efficiency: %{y:.2f} ${unit}<br>%{customdata[0]:.0f} qualifying min · %{customdata[1]}<extra></extra>`});
+                const rolling=items.map((item)=>{const cutoff=new Date(item.date);cutoff.setUTCDate(cutoff.getUTCDate()-27);const windowValues=items.filter(i=>i.date<=item.date&&new Date(i.date)>=cutoff).map(i=>i.value*scale).sort((a,b)=>a-b);return windowValues.length?windowValues[Math.floor(windowValues.length/2)]:null});
+                traces.push({x:items.map(i=>i.date),y:rolling,name:'28-day median',mode:'lines',visible,
+                    line:{color:aerobicColors[index%aerobicColors.length],dash:'dash'},
+                    hovertemplate:`%{x}<br>28-day median: %{y:.2f} ${unit}<extra></extra>`});
+                groupMeta.push({label, unit});
+            });
+            if (!traces.length) {
+                Plotly.react('ab-efficiency-trend', [], aerobicLayout('Aerobic-efficiency trend · insufficient qualifying samples', ''), aerobicPlotConfig);
+                return;
+            }
+            const buttons = groupMeta.map((meta,index) => ({
+                label: meta.label,
+                method: 'update',
+                args: [
+                    {visible: traces.map((_,traceIndex) => Math.floor(traceIndex/2) === index)},
+                    {'title.text': `Aerobic-efficiency trend · ${meta.label}`, 'yaxis.title.text': meta.unit}
+                ]
+            }));
+            const layout = aerobicLayout(`Aerobic-efficiency trend · ${groupMeta[0].label}`, groupMeta[0].unit, {
+                yaxis:{title:groupMeta[0].unit,tickformat:'.2f'},
+                updatemenus: groupMeta.length > 1 ? [{buttons, direction:'down', x:0, y:1.16, xanchor:'left'}] : []
+            });
+            Plotly.react('ab-efficiency-trend',traces,layout,aerobicPlotConfig);
+        }
+
+        function renderRecoveryChart(rows) {
+            const metrics=[['hrv','HRV'],['resting_hr','Resting HR'],['sleep_hours','Sleep'],['body_battery','Body Battery']];
+            const traces=metrics.map(([key,label],index)=>{const values=rows.map(r=>r[key]).filter(v=>v!=null).sort((a,b)=>a-b);const baseline=values.length?values[Math.floor(values.length/2)]:null;return {x:rows.map(r=>r.date),y:rows.map(r=>r[key]==null||!baseline?null:100*r[key]/baseline),customdata:rows.map(r=>r[key]),name:label,mode:'lines+markers',line:{color:aerobicColors[index]},hovertemplate:`%{x}<br>${label}: %{customdata}<br>%{y:.0f}% of personal range median<extra></extra>`}});
+            traces.push({x:rows.length?[rows[0].date,rows[rows.length-1].date]:[],y:[100,100],name:'Personal baseline',mode:'lines',line:{color:'#64748b',dash:'dash'}});
+            Plotly.react('ab-recovery-trend',traces,aerobicLayout('Recovery trends · personal baselines','% of personal baseline'),aerobicPlotConfig);
         }
         
         function loadDaysAgo(daysAgo) {

@@ -4,8 +4,11 @@ Fitness Dashboard - Web Application
 Interactive web interface for viewing heart rate data with date selection
 """
 from flask import Flask, render_template, request, jsonify
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from garmin_client import GarminClient
+from aerobic_base import BUCHAREST, iso_week_bounds
+from aerobic_repository import AerobicRepository
+from aerobic_service import build_daily_calendar, build_dashboard, import_range, load_aerobic_settings
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.utils
@@ -95,6 +98,7 @@ def _compute_bin_colors(bin_centers, max_hr):
 
 # Global Garmin client (will be initialized on first request)
 garmin_client = None
+aerobic_repository = None
 
 
 def get_garmin_client():
@@ -105,6 +109,14 @@ def get_garmin_client():
         garmin_client.load_credentials('config.json')
         garmin_client.login()
     return garmin_client
+
+
+def get_aerobic_repository():
+    """Return the repository sharing the existing Garmin SQLite cache."""
+    global aerobic_repository
+    if aerobic_repository is None:
+        aerobic_repository = AerobicRepository()
+    return aerobic_repository
 
 
 def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
@@ -395,7 +407,97 @@ def index():
     """Main page with date picker"""
     # Default to yesterday
     default_date = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
-    return render_template('index.html', default_date=default_date, max_hr=DEFAULT_MAX_HR)
+    now = datetime.now(BUCHAREST)
+    iso = now.isocalendar()
+    default_week = f"{iso.year}-W{iso.week:02d}"
+    return render_template('index.html', default_date=default_date, max_hr=DEFAULT_MAX_HR,
+                           default_week=default_week, current_year=now.year)
+
+
+@app.route('/healthz')
+def healthz():
+    """Lightweight process/database health check; never contacts Garmin."""
+    try:
+        latest_sync = get_aerobic_repository().latest_sync_run()
+        return jsonify({
+            'status': 'ok',
+            'time': datetime.now(BUCHAREST).isoformat(),
+            'latest_sync_status': latest_sync['status'] if latest_sync else None,
+            'latest_sync_finished_at': latest_sync['finished_at'] if latest_sync else None,
+        })
+    except Exception as exc:
+        logger.exception('Health check failed')
+        return jsonify({'status': 'error', 'error': str(exc)}), 503
+
+
+@app.route('/get_aerobic_base_data')
+def get_aerobic_base_data():
+    """Return cached weekly aerobic-base results and traceable raw inputs."""
+    week = request.args.get('week')
+    range_str = request.args.get('range', '4')
+    sport = request.args.get('sport', 'auto').strip().lower()
+    if not week:
+        now = datetime.now(BUCHAREST).isocalendar()
+        week = f"{now.year}-W{now.week:02d}"
+    try:
+        range_weeks = int(range_str)
+        if range_weeks not in (4, 12, 26, 52):
+            raise ValueError('range must be 4, 12, 26, or 52 weeks')
+        start, _ = iso_week_bounds(week)
+        current = datetime.now(BUCHAREST).date()
+        if start.date() > current:
+            raise ValueError('future weeks are not available')
+        settings = load_aerobic_settings()
+        allowed_sports = {'auto', *settings.eligible_activity_types}
+        if sport not in allowed_sports:
+            raise ValueError('sport is not configured as eligible')
+        result = build_dashboard(get_aerobic_repository(), settings, week, range_weeks, sport)
+        return jsonify(result)
+    except (ValueError, KeyError, json.JSONDecodeError) as exc:
+        return jsonify({'error': str(exc)}), 400
+    except Exception as exc:
+        logger.exception('Failed to build aerobic-base dashboard')
+        return jsonify({'error': str(exc)}), 500
+
+
+@app.route('/refresh_aerobic_base_data', methods=['POST'])
+def refresh_aerobic_base_data():
+    """Import one bounded date chunk; repeated calls are idempotent upserts."""
+    payload = request.get_json(silent=True) or {}
+    try:
+        start = date.fromisoformat(payload.get('start', ''))
+        end = date.fromisoformat(payload.get('end', ''))
+        if end < start:
+            raise ValueError('end must be on or after start')
+        if (end - start).days >= 28:
+            raise ValueError('refresh chunks may contain at most 28 days')
+        if start > datetime.now(BUCHAREST).date():
+            raise ValueError('future dates cannot be imported')
+        include_wellness = payload.get('include_wellness', True) is not False
+        result = import_range(get_garmin_client(), get_aerobic_repository(), start, end,
+                              load_aerobic_settings(), include_wellness=include_wellness)
+        return jsonify({'status': 'complete', **result})
+    except (ValueError, KeyError, json.JSONDecodeError) as exc:
+        return jsonify({'error': str(exc)}), 400
+    except Exception as exc:
+        logger.exception('Failed to refresh aerobic-base data')
+        return jsonify({'error': str(exc)}), 500
+
+
+@app.route('/get_aerobic_calendar_data')
+def get_aerobic_calendar_data():
+    """Return daily guide scores for a year-to-date calendar dashboard."""
+    try:
+        current_year = datetime.now(BUCHAREST).year
+        year = int(request.args.get('year', current_year))
+        if year < 2000 or year > current_year:
+            raise ValueError(f'year must be between 2000 and {current_year}')
+        return jsonify(build_daily_calendar(get_aerobic_repository(), load_aerobic_settings(), year))
+    except (ValueError, KeyError, json.JSONDecodeError) as exc:
+        return jsonify({'error': str(exc)}), 400
+    except Exception as exc:
+        logger.exception('Failed to build aerobic calendar')
+        return jsonify({'error': str(exc)}), 500
 
 
 @app.route('/get_heart_rate_data')

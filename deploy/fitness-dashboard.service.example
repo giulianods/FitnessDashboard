@@ -1,0 +1,17 @@
+[Unit]
+Description=FitnessDashboard web server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=YOUR_USER
+Group=YOUR_GROUP
+WorkingDirectory=/absolute/path/to/FitnessDashboard
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/absolute/path/to/FitnessDashboard/.venv/bin/gunicorn --workers 2 --threads 2 --timeout 120 --bind 127.0.0.1:5000 --access-logfile - --error-logfile - wsgi:app
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
