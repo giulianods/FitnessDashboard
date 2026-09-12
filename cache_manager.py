@@ -6,14 +6,22 @@ import sqlite3
 import json
 import os
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 from pathlib import Path
 
 # Configure logger for cache operations
 # By default, only WARNING and above will be logged (cache operations won't show)
 # To enable cache debug logs, set: logging.getLogger('cache_manager').setLevel(logging.DEBUG)
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class CacheResult:
+    """A cache lookup that distinguishes a miss from a stored empty value."""
+    hit: bool
+    value: Any = None
 
 
 class CacheManager:
@@ -101,16 +109,25 @@ class CacheManager:
             
             conn.commit()
     
-    def _is_cache_valid(self, cached_at_str: str) -> bool:
+    def _is_cache_valid(self, cached_at_str: str, date_str: str) -> bool:
         """
-        Check if cached data is still valid
-        
-        Args:
-            cached_at_str: Timestamp string when data was cached
-            
-        Returns:
-            True if cache is still valid, False otherwise
+        Check if cached data is still valid.
+
+        Completed days older than yesterday do not change, so they never expire.
+        Yesterday still uses cache_hours because Garmin may backfill sleep/HRV.
+        Today and future dates are never served from cache.
         """
+        try:
+            day = datetime.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            return False
+
+        today = datetime.now().date()
+        if day >= today:
+            return False
+        if day < today - timedelta(days=1):
+            return True
+
         cached_at = datetime.fromisoformat(cached_at_str)
         expiry_time = cached_at + timedelta(hours=self.cache_hours)
         return datetime.now() < expiry_time
@@ -131,7 +148,7 @@ class CacheManager:
         # TIER 1: Check memory cache first (ultra-fast, no disk I/O)
         if date_str in self._memory_cache['hr']:
             data, cached_at = self._memory_cache['hr'][date_str]
-            if self._is_cache_valid(cached_at):
+            if self._is_cache_valid(cached_at, date_str):
                 logger.debug(f"Memory cache HIT for HR data {date_str}")
                 return data
             else:
@@ -154,7 +171,7 @@ class CacheManager:
             data_json, cached_at = result
             
             # Check if cache is still valid
-            if self._is_cache_valid(cached_at):
+            if self._is_cache_valid(cached_at, date_str):
                 logger.debug(f"Database cache HIT for HR data {date_str} (cached at {cached_at})")
                 
                 # Check if this is a cached None value
@@ -247,7 +264,7 @@ class CacheManager:
         # TIER 1: Check memory cache first (ultra-fast)
         if date_str in self._memory_cache['hrv']:
             value, cached_at = self._memory_cache['hrv'][date_str]
-            if self._is_cache_valid(cached_at):
+            if self._is_cache_valid(cached_at, date_str):
                 logger.debug(f"Memory cache HIT for HRV data {date_str}")
                 return value
             else:
@@ -270,7 +287,7 @@ class CacheManager:
             value, cached_at = result
             
             # Check if cache is still valid
-            if self._is_cache_valid(cached_at):
+            if self._is_cache_valid(cached_at, date_str):
                 logger.debug(f"Database cache HIT for HRV data {date_str} (cached at {cached_at})")
                 # Store in memory cache for next time
                 self._memory_cache['hrv'][date_str] = (value, cached_at)
@@ -315,7 +332,85 @@ class CacheManager:
         # Store in memory cache
         self._memory_cache['hrv'][date_str] = (value, cached_at)
         logger.debug(f"Cached HRV data for {date_str} (value: {value})")
-    
+
+    def lookup_heart_rate_data(self, date: datetime) -> CacheResult:
+        """Look up HR data, distinguishing a miss from a stored empty day."""
+        date_str = date.strftime('%Y-%m-%d')
+        cached = self.get_heart_rate_data_bulk([date_str])
+        if date_str in cached:
+            return CacheResult(hit=True, value=cached[date_str])
+        return CacheResult(hit=False)
+
+    def lookup_hrv_data(self, date: datetime) -> CacheResult:
+        """Look up HRV data, distinguishing a miss from a stored empty day."""
+        date_str = date.strftime('%Y-%m-%d')
+        cached = self.get_hrv_data_bulk([date_str])
+        if date_str in cached:
+            return CacheResult(hit=True, value=cached[date_str])
+        return CacheResult(hit=False)
+
+    def get_hrv_data_bulk(self, date_strings: List[str]) -> Dict[str, Optional[float]]:
+        """
+        Get cached HRV values for multiple dates in a single SQL query.
+
+        Dates present in cache are included even when the stored value is None.
+        Missing or expired dates (yesterday past TTL) are omitted.
+        """
+        if not date_strings:
+            return {}
+
+        result: Dict[str, Optional[float]] = {}
+        db_lookup_dates = []
+
+        for date_str in date_strings:
+            if date_str in self._memory_cache['hrv']:
+                value, cached_at = self._memory_cache['hrv'][date_str]
+                if self._is_cache_valid(cached_at, date_str):
+                    result[date_str] = value
+                else:
+                    del self._memory_cache['hrv'][date_str]
+                    db_lookup_dates.append(date_str)
+            else:
+                db_lookup_dates.append(date_str)
+
+        if not db_lookup_dates:
+            logger.debug(
+                f"Bulk HRV cache: {len(result)}/{len(date_strings)} memory hits"
+            )
+            return result
+
+        placeholders = ','.join('?' * len(db_lookup_dates))
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                f'SELECT date, value, cached_at FROM hrv_data '
+                f'WHERE date IN ({placeholders})',
+                db_lookup_dates,
+            )
+            rows = cursor.fetchall()
+
+        expired_dates = []
+        for date_str, value, cached_at in rows:
+            if not self._is_cache_valid(cached_at, date_str):
+                expired_dates.append(date_str)
+                continue
+            result[date_str] = value
+            self._memory_cache['hrv'][date_str] = (value, cached_at)
+
+        if expired_dates:
+            with sqlite3.connect(self.db_path) as conn:
+                expired_placeholders = ','.join('?' * len(expired_dates))
+                conn.execute(
+                    f'DELETE FROM hrv_data WHERE date IN ({expired_placeholders})',
+                    expired_dates,
+                )
+                conn.commit()
+
+        logger.debug(
+            f"Bulk HRV cache: {len(result)}/{len(date_strings)} hits"
+        )
+        return result
+
     def get_heart_rate_data_bulk(self, date_strings: List[str]) -> Dict[str, Optional[List[Dict]]]:
         """
         Get cached heart rate data for multiple dates in a single SQL query.
@@ -342,7 +437,7 @@ class CacheManager:
         for date_str in date_strings:
             if date_str in self._memory_cache['hr']:
                 data, cached_at = self._memory_cache['hr'][date_str]
-                if self._is_cache_valid(cached_at):
+                if self._is_cache_valid(cached_at, date_str):
                     result[date_str] = data
                 else:
                     del self._memory_cache['hr'][date_str]
@@ -369,7 +464,7 @@ class CacheManager:
 
         expired_dates = []
         for date_str, data_json, cached_at in rows:
-            if not self._is_cache_valid(cached_at):
+            if not self._is_cache_valid(cached_at, date_str):
                 expired_dates.append(date_str)
                 continue
 
@@ -606,15 +701,16 @@ class CacheManager:
         """
         expiry_time = datetime.now() - timedelta(hours=self.cache_hours)
         expiry_str = expiry_time.isoformat()
-        
-        # Clean expired entries from memory cache
+        yesterday = (datetime.now().date() - timedelta(days=1)).isoformat()
+
+        # Only yesterday (and any accidental today/future rows) can expire.
         expired_hr_keys = [
             date_str for date_str, (_, cached_at) in self._memory_cache['hr'].items()
-            if not self._is_cache_valid(cached_at)
+            if not self._is_cache_valid(cached_at, date_str)
         ]
         expired_hrv_keys = [
             date_str for date_str, (_, cached_at) in self._memory_cache['hrv'].items()
-            if not self._is_cache_valid(cached_at)
+            if not self._is_cache_valid(cached_at, date_str)
         ]
         
         for key in expired_hr_keys:
@@ -626,17 +722,17 @@ class CacheManager:
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             
-            # Delete expired HR data
+            # Delete expired HR data (yesterday and newer only)
             cursor.execute(
-                'DELETE FROM heart_rate_data WHERE cached_at < ?',
-                (expiry_str,)
+                'DELETE FROM heart_rate_data WHERE date >= ? AND cached_at < ?',
+                (yesterday, expiry_str)
             )
             hr_deleted = cursor.rowcount
             
-            # Delete expired HRV data
+            # Delete expired HRV data (yesterday and newer only)
             cursor.execute(
-                'DELETE FROM hrv_data WHERE cached_at < ?',
-                (expiry_str,)
+                'DELETE FROM hrv_data WHERE date >= ? AND cached_at < ?',
+                (yesterday, expiry_str)
             )
             hrv_deleted = cursor.rowcount
             

@@ -533,7 +533,10 @@
                     <button class="period-btn" onclick="loadHistoricalData(16, event)">16 Weeks</button>
                     <button class="period-btn" onclick="loadHistoricalData(24, event)">24 Weeks</button>
                     <button class="period-btn" onclick="loadHistoricalData(48, event)">48 Weeks</button>
+                    <button class="period-btn" onclick="loadHistoricalData(72, event)">72 Weeks</button>
+                    <button type="button" id="historical-refresh-btn" onclick="loadHistoricalDataInitial(currentWeeks, true)">Refresh from Garmin</button>
                 </div>
+                <div id="historical-import-status" class="import-status"></div>
             </div>
             
             <div id="historical-stats-container"></div>
@@ -706,9 +709,17 @@
                 title: {text: title, font: {size: 16}}, margin: {l: 55, r: 25, t: 50, b: 55},
                 paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
                 font: {color: dark ? '#e2e8f0' : '#334155'},
-                xaxis: {gridcolor: dark ? '#334155' : '#e2e8f0'},
+                xaxis: {
+                    gridcolor: dark ? '#334155' : '#e2e8f0',
+                    showspikes: true,
+                    spikemode: 'across',
+                    spikesnap: 'cursor',
+                    spikecolor: dark ? 'rgba(148,163,184,0.7)' : 'rgba(51,51,51,0.5)',
+                    spikethickness: 1,
+                    spikedash: 'solid'
+                },
                 yaxis: {title: yTitle, gridcolor: dark ? '#334155' : '#e2e8f0'},
-                legend: {orientation: 'h', y: -0.2}, hovermode: 'x unified'
+                legend: {orientation: 'h', y: -0.2}, hovermode: 'x unified', spikedistance: -1
             }, extra);
         }
 
@@ -1162,67 +1173,95 @@
             currentWeeks = weeks;
             
             // Update active button
-            document.querySelectorAll('.period-btn').forEach(btn => {
+            document.querySelectorAll('#historical-view .period-btn').forEach(btn => {
                 btn.classList.remove('active');
             });
             event.currentTarget.classList.add('active');
             
-            loadHistoricalDataInitial(weeks);
+            loadHistoricalDataInitial(weeks, false);
         }
         
-        function loadHistoricalDataInitial(weeks) {
-            // Show loading
+        function setHistoricalLoading(message) {
+            document.getElementById('historical-import-status').textContent = message;
             document.getElementById('historical-chart').innerHTML = `
                 <div class="loading">
                     <div class="spinner"></div>
-                    <p>Loading ${weeks} weeks of historical data...</p>
+                    <p>${message}</p>
                 </div>
             `;
+        }
+
+        async function loadHistoricalDataInitial(weeks, forceRefresh) {
+            const refreshBtn = document.getElementById('historical-refresh-btn');
+            const statusEl = document.getElementById('historical-import-status');
             document.getElementById('historical-stats-container').innerHTML = '';
-            
-            // Fetch historical data
-            fetch(`/get_historical_data?weeks=${weeks}`)
-                .then(response => {
-                    if (!response.ok) {
-                        return response.json().then(err => {
-                            throw new Error(err.error || 'Failed to load data');
+            if (refreshBtn) refreshBtn.disabled = true;
+            try {
+                setHistoricalLoading(`Checking cached data for ${weeks} weeks…`);
+                const statusResponse = await fetch(`/get_historical_cache_status?weeks=${weeks}`);
+                const cacheStatus = await statusResponse.json();
+                if (!statusResponse.ok) {
+                    throw new Error(cacheStatus.error || 'Failed to check cache');
+                }
+                const fillKey = `historical-garmin-fill-${weeks}`;
+                const alreadyFilled = sessionStorage.getItem(fillKey);
+                const ranges = cacheStatus.ranges || [];
+                if (ranges.length && (forceRefresh || !alreadyFilled)) {
+                    for (let i = 0; i < ranges.length; i++) {
+                        const range = ranges[i];
+                        setHistoricalLoading(
+                            `Retrieving Garmin data ${i + 1}/${ranges.length}: ${range.start} – ${range.end}…`
+                        );
+                        const response = await fetch('/refresh_historical_data', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({start: range.start, end: range.end})
                         });
+                        const result = await response.json();
+                        if (!response.ok) {
+                            throw new Error(result.error || 'Garmin import failed');
+                        }
+                        const imported = result.imported || 0;
+                        const empty = result.empty || 0;
+                        statusEl.textContent = `Cached ${imported} days with HR, ${empty} with no HR in this chunk.`;
                     }
-                    return response.json();
-                })
-                .then(data => {
-                    // Parse chart data
-                    const chartData = JSON.parse(data.chart);
-                    
-                    // Clear the chart div first
-                    document.getElementById('historical-chart').innerHTML = '';
-                    
-                    // Display chart
-                    Plotly.newPlot('historical-chart', chartData.data, chartData.layout, {
-                        responsive: true,
-                        displayModeBar: true,
-                        displaylogo: false
-                    });
-                    
-                    // Display statistics
-                    displayHistoricalStats(data.stats);
-                })
-                .catch(error => {
-                    document.getElementById('historical-chart').innerHTML = `
-                        <div class="error">
-                            <h3>⚠️ Error Loading Historical Data</h3>
-                            <p>${error.message}</p>
-                            <p style="margin-top: 10px; font-size: 0.9em;">
-                                This could mean:<br>
-                                • No activity was recorded in this period<br>
-                                • Your Garmin device was not worn<br>
-                                • The data has not synced yet<br>
-                                • Invalid credentials in config.json
-                            </p>
-                        </div>
-                    `;
-                    console.error('Error:', error);
+                    sessionStorage.setItem(fillKey, '1');
+                }
+                setHistoricalLoading(`Building the ${weeks}-week chart from cache…`);
+                const response = await fetch(`/get_historical_data?weeks=${weeks}`);
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to load data');
+                }
+                const chartData = JSON.parse(data.chart);
+                document.getElementById('historical-chart').innerHTML = '';
+                Plotly.newPlot('historical-chart', chartData.data, chartData.layout, {
+                    responsive: true,
+                    displayModeBar: true,
+                    displaylogo: false
                 });
+                displayHistoricalStats(data.stats);
+                const latestStatusResponse = await fetch(`/get_historical_cache_status?weeks=${weeks}`);
+                const latestStatus = await latestStatusResponse.json();
+                statusEl.textContent = `Cached source: ${latestStatus.with_data} days with HR, ${latestStatus.empty} empty, ${latestStatus.missing} missing.`;
+            } catch (error) {
+                document.getElementById('historical-chart').innerHTML = `
+                    <div class="error">
+                        <h3>Error Loading Historical Data</h3>
+                        <p>${error.message}</p>
+                        <p style="margin-top: 10px; font-size: 0.9em;">
+                            This could mean:<br>
+                            • Garmin login expired — try Refresh from Garmin<br>
+                            • No activity was recorded in this period<br>
+                            • The data has not synced yet
+                        </p>
+                    </div>
+                `;
+                statusEl.textContent = error.message;
+                console.error('Error:', error);
+            } finally {
+                if (refreshBtn) refreshBtn.disabled = false;
+            }
         }
         
         function displayStats(stats) {

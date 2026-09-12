@@ -6,6 +6,7 @@ Interactive web interface for viewing heart rate data with date selection
 from flask import Flask, render_template, request, jsonify
 from datetime import date, datetime, timedelta
 from garmin_client import GarminClient
+from cache_manager import CacheManager
 from aerobic_base import BUCHAREST, iso_week_bounds
 from aerobic_repository import AerobicRepository
 from aerobic_service import build_daily_calendar, build_dashboard, import_range, load_aerobic_settings
@@ -41,6 +42,35 @@ ZONE_COLORS = {
     'Z4':  '#FFA000',  # amber           (~38°)
     'Z5':  '#F4511E',  # deep orange-red (~16°)
 }
+
+_HOVER_SPIKE = dict(
+    showspikes=True,
+    spikemode='across',
+    spikesnap='cursor',
+    spikecolor='rgba(51, 51, 51, 0.5)',
+    spikethickness=1,
+    spikedash='solid',
+)
+
+
+def _enable_hover_crosshair(fig, subplot_axes=None):
+    """Show a vertical guide and value labels for every trace at the hovered x."""
+    fig.update_layout(
+        hovermode='x unified',
+        spikedistance=-1,
+        hoverlabel=dict(
+            bgcolor='white',
+            bordercolor='#CBD5E1',
+            font=dict(size=12, color='#333'),
+            namelength=-1,
+        ),
+    )
+    if subplot_axes:
+        for row, col in subplot_axes:
+            fig.update_xaxes(**_HOVER_SPIKE, row=row, col=col)
+    else:
+        fig.update_xaxes(**_HOVER_SPIKE)
+
 
 def format_time(minutes):
     """Format time in minutes to human-readable hours and minutes string."""
@@ -117,6 +147,64 @@ def get_aerobic_repository():
     if aerobic_repository is None:
         aerobic_repository = AerobicRepository()
     return aerobic_repository
+
+
+def _historical_period_bounds(weeks: int) -> tuple[datetime, datetime, datetime]:
+    """Return prefetch_start, display_start, end (yesterday) for a historical window."""
+    display_days = weeks * 7
+    end_date = datetime.combine((datetime.now() - timedelta(days=1)).date(), datetime.min.time())
+    start_date = end_date - timedelta(days=display_days - 1)
+    prefetch_start = start_date - timedelta(days=27)
+    return prefetch_start, start_date, end_date
+
+
+def _contiguous_date_ranges(date_strs: list[str], max_days: int = 7) -> list[tuple[str, str]]:
+    """Split ISO dates into contiguous ranges of at most max_days."""
+    if not date_strs:
+        return []
+    ordered = sorted(date_strs)
+    ranges: list[tuple[str, str]] = []
+    range_start = prev = ordered[0]
+    for current in ordered[1:]:
+        current_day = date.fromisoformat(current)
+        prev_day = date.fromisoformat(prev)
+        span = (current_day - date.fromisoformat(range_start)).days + 1
+        if current_day == prev_day + timedelta(days=1) and span <= max_days:
+            prev = current
+            continue
+        ranges.append((range_start, prev))
+        range_start = prev = current
+    ranges.append((range_start, prev))
+    return ranges
+
+
+def _dates_inclusive(start: datetime, end: datetime) -> list[datetime]:
+    dates = []
+    current = start
+    while current <= end:
+        dates.append(current)
+        current += timedelta(days=1)
+    return dates
+
+
+def _load_hr_hrv_period(client, prefetch_start: datetime, end_date: datetime,
+                        stats_start: datetime):
+    """Bulk-load cached HR/HRV for a period and collect display-window stats."""
+    dates = _dates_inclusive(prefetch_start, end_date)
+    hr_by_date = client.get_heart_rate_data_for_dates(dates)
+    hrv_by_date = client.get_hrv_data_for_dates(dates)
+    period_data = {}
+    all_heart_rates = []
+    for current_date in dates:
+        date_str = current_date.strftime('%Y-%m-%d')
+        hr_data = hr_by_date.get(date_str)
+        period_data[date_str] = {
+            'hr_data': hr_data if hr_data else [],
+            'hrv': hrv_by_date.get(date_str),
+        }
+        if hr_data and current_date >= stats_start:
+            all_heart_rates.extend(point['heart_rate'] for point in hr_data)
+    return period_data, all_heart_rates
 
 
 def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
@@ -207,7 +295,8 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
         line=dict(color='#4A90E2', width=2),
         fill='tozeroy',
         fillcolor='rgba(74, 144, 226, 0.2)',
-        showlegend=False
+        showlegend=False,
+        hovertemplate='%{y:.0f} bpm<extra></extra>',
     ), row=1, col=1)
     
     # Add horizontal zone lines AFTER the trace so they appear on top
@@ -239,10 +328,12 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
         y=zone_labels,
         x=zone_time_values,
         orientation='h',
+        name='Zone time',
         marker=dict(color=zone_colors_bar),
         text=[format_time(t) for t in zone_time_values],
         textposition='auto',
-        showlegend=False
+        showlegend=False,
+        hovertemplate='%{y}: %{text}<extra></extra>',
     ), row=2, col=1)
     
     # Add histogram for HR distribution during waking hours with lognormal fit
@@ -276,7 +367,8 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
                 line=dict(color='white', width=1)
             ),
             showlegend=False,
-            name='HR Distribution'
+            name='HR Distribution',
+            hovertemplate='%{x:.0f} bpm<extra></extra>',
         ), row=2, col=2)
         
         # Fit lognormal distribution shifted by resting heart rate
@@ -312,7 +404,8 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
                 mode='lines',
                 line=dict(color='#FF6347', width=2.5, dash='solid'),
                 name='Lognormal Fit',
-                showlegend=False
+                showlegend=False,
+                hovertemplate='%{y:.4f}<extra></extra>',
             ), row=2, col=2)
             
             # Add annotation showing mean, standard deviation, and resting HR
@@ -398,6 +491,8 @@ def create_chart_json(data, max_hr=DEFAULT_MAX_HR):
         gridcolor='#E0E0E0',
         row=2, col=2
     )
+
+    _enable_hover_crosshair(fig, [(1, 1), (2, 1), (2, 2)])
     
     return json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder), zone_times
 
@@ -547,6 +642,42 @@ def get_heart_rate_data():
         return jsonify({'error': 'Invalid date format. Please use YYYY-MM-DD'}), 400
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+def _slice_display_period(dates, values, display_start_date):
+    """Keep every display-window day, including days with no sample (None)."""
+    if not display_start_date:
+        return list(dates), list(values)
+    out_dates, out_values = [], []
+    for date_str, value in zip(dates, values):
+        if date_str >= display_start_date:
+            out_dates.append(date_str)
+            out_values.append(value)
+    return out_dates, out_values
+
+
+def _first_last_with_values(dates, *value_lists):
+    """First and last dates that have at least one numeric sample."""
+    first = last = None
+    for i, date_str in enumerate(dates):
+        if any(i < len(values) and values[i] is not None for values in value_lists):
+            if first is None:
+                first = date_str
+            last = date_str
+    return first, last
+
+
+def _padded_numeric_range(values, pad_ratio=0.08):
+    """Y-axis range fitted to samples, with a little padding so markers are not clipped."""
+    nums = [value for value in values if isinstance(value, (int, float))]
+    if not nums:
+        return None
+    lo, hi = min(nums), max(nums)
+    span = hi - lo
+    if span == 0:
+        span = abs(hi) * 0.1 or 1
+    pad = span * pad_ratio
+    return [lo - pad, hi + pad]
 
 
 def calculate_moving_average(values, window_size):
@@ -715,20 +846,11 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
         horizontal_spacing=0.1
     )
     
-    # Chart A: Daily min/max heart rate (no legend)
-    # Filter out None values for data points to ensure clean visualization
-    # Filter data points to display period only (dates >= display_start_date)
-    if display_start_date:
-        min_hr_dates = [d for d, v in zip(dates, daily_mins) if d >= display_start_date and v is not None]
-        min_hr_values = [v for d, v in zip(dates, daily_mins) if d >= display_start_date and v is not None]
-        max_hr_dates = [d for d, v in zip(dates, daily_maxs) if d >= display_start_date and v is not None]
-        max_hr_values = [v for d, v in zip(dates, daily_maxs) if d >= display_start_date and v is not None]
-    else:
-        # Fallback: show all dates with data
-        min_hr_dates = [d for d, v in zip(dates, daily_mins) if v is not None]
-        min_hr_values = [v for v in daily_mins if v is not None]
-        max_hr_dates = [d for d, v in zip(dates, daily_maxs) if v is not None]
-        max_hr_values = [v for v in daily_maxs if v is not None]
+    # Chart A: Daily min/max heart rate. Empty days stay in the series so gaps
+    # remain visible; the axis itself is scaled to the first/last sample.
+    min_hr_dates, min_hr_values = _slice_display_period(dates, daily_mins, display_start_date)
+    max_hr_dates, max_hr_values = _slice_display_period(dates, daily_maxs, display_start_date)
+    display_end_date = min_hr_dates[-1] if min_hr_dates else display_start_date
     
     fig.add_trace(go.Scatter(
         x=min_hr_dates,
@@ -737,7 +859,9 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
         name='Min HR',
         line=dict(color='#4A90E2', width=2),
         marker=dict(size=6),
-        showlegend=False
+        connectgaps=False,
+        showlegend=False,
+        hovertemplate='%{y:.0f} bpm<extra></extra>',
     ), row=1, col=1)
     
     fig.add_trace(go.Scatter(
@@ -747,32 +871,25 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
         name='Max HR',
         line=dict(color='#FF6347', width=2),
         marker=dict(size=6),
-        showlegend=False
+        connectgaps=False,
+        showlegend=False,
+        hovertemplate='%{y:.0f} bpm<extra></extra>',
     ), row=1, col=1)
     
-    # Add moving average for Min HR
-    # Show MA for display period dates (calculated from all dates including prefetch)
-    # This ensures proper MA values from first display date using prefetch data
-    if display_start_date:
-        min_hr_ma_dates = [d for d, ma in zip(dates, daily_mins_ma) 
-                           if d >= display_start_date and ma is not None]
-        min_hr_ma_values = [ma for d, ma in zip(dates, daily_mins_ma) 
-                            if d >= display_start_date and ma is not None]
-    else:
-        # Fallback: Only show MA where data exists
-        min_hr_ma_dates = [d for d, v, ma in zip(dates, daily_mins, daily_mins_ma) 
-                           if v is not None and ma is not None]
-        min_hr_ma_values = [ma for v, ma in zip(daily_mins, daily_mins_ma) 
-                            if v is not None and ma is not None]
+    min_hr_ma_dates, min_hr_ma_values = _slice_display_period(
+        dates, daily_mins_ma, display_start_date
+    )
     
-    if min_hr_ma_dates:
+    if any(value is not None for value in min_hr_ma_values):
         fig.add_trace(go.Scatter(
             x=min_hr_ma_dates,
             y=min_hr_ma_values,
             mode='lines',
             name=f'Min HR MA ({ma_window}d)',
             line=dict(color='#FF6B35', width=2, dash='solid'),  # Orange for contrast with blue
-            showlegend=False
+            connectgaps=False,
+            showlegend=False,
+            hovertemplate='%{y:.1f} bpm<extra></extra>',
         ), row=1, col=1)
     
     # Chart B: Time in each zone (horizontal bar chart)
@@ -789,20 +906,15 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
         marker=dict(color=zone_colors),
         text=[format_time(t) for t in zone_time_values],
         textposition='auto',
-        showlegend=False
+        name='Zone time',
+        showlegend=False,
+        hovertemplate='%{y}: %{text}<extra></extra>',
     ), row=1, col=2)
     
     # Chart D: Daily HRV (positioned at row 2, col 1)
-    # Filter HRV data points to display period only
-    if display_start_date:
-        hrv_dates = [date for date, hrv in zip(dates, daily_hrvs) if date >= display_start_date and hrv is not None]
-        hrv_values = [v for date, v in zip(dates, daily_hrvs) if date >= display_start_date and v is not None]
-    else:
-        # Fallback: show all dates with HRV data
-        hrv_dates = [date for date, hrv in zip(dates, daily_hrvs) if hrv is not None]
-        hrv_values = [v for v in daily_hrvs if v is not None]
+    hrv_dates, hrv_values = _slice_display_period(dates, daily_hrvs, display_start_date)
     
-    if hrv_values:
+    if any(value is not None for value in hrv_values):
         fig.add_trace(go.Scatter(
             x=hrv_dates,
             y=hrv_values,
@@ -810,31 +922,25 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
             name='HRV',
             line=dict(color='#9B59B6', width=2),
             marker=dict(size=6),
-            showlegend=False
+            connectgaps=False,
+            showlegend=False,
+            hovertemplate='%{y:.1f} ms<extra></extra>',
         ), row=2, col=1)
         
-        # Add moving average for HRV
-        # Show HRV MA for display period dates (calculated from all dates including prefetch)
-        if display_start_date:
-            hrv_ma_dates = [date for date, ma in zip(dates, hrv_values_ma) 
-                            if date >= display_start_date and ma is not None]
-            hrv_ma_vals = [ma for date, ma in zip(dates, hrv_values_ma) 
-                           if date >= display_start_date and ma is not None]
-        else:
-            # Fallback: Only show MA where HRV data exists
-            hrv_ma_dates = [date for date, hrv, ma in zip(dates, daily_hrvs, hrv_values_ma) 
-                            if hrv is not None and ma is not None]
-            hrv_ma_vals = [ma for hrv, ma in zip(daily_hrvs, hrv_values_ma) 
-                           if hrv is not None and ma is not None]
+        hrv_ma_dates, hrv_ma_vals = _slice_display_period(
+            dates, hrv_values_ma, display_start_date
+        )
         
-        if hrv_ma_dates:
+        if any(value is not None for value in hrv_ma_vals):
             fig.add_trace(go.Scatter(
                 x=hrv_ma_dates,
                 y=hrv_ma_vals,
                 mode='lines',
                 name=f'HRV MA ({ma_window}d)',
                 line=dict(color='#28B463', width=2, dash='solid'),  # Green for contrast with purple
-                showlegend=False
+                connectgaps=False,
+                showlegend=False,
+                hovertemplate='%{y:.1f} ms<extra></extra>',
             ), row=2, col=1)
     
     # Chart C: Heart rate distribution with lognormal fit (positioned at row 2, col 2)
@@ -869,7 +975,8 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
                 line=dict(color='white', width=1)
             ),
             showlegend=False,
-            name='HR Distribution'
+            name='HR Distribution',
+            hovertemplate='%{x:.0f} bpm<extra></extra>',
         ), row=2, col=2)
         
         # Fit lognormal distribution
@@ -892,7 +999,8 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
                 mode='lines',
                 line=dict(color='#FF6347', width=2.5, dash='solid'),
                 name='Lognormal Fit',
-                showlegend=False
+                showlegend=False,
+                hovertemplate='%{y:.4f}<extra></extra>',
             ), row=2, col=2)
             
             # Add annotation with stats
@@ -924,21 +1032,46 @@ def create_historical_chart_json(weeks_data, max_hr=DEFAULT_MAX_HR, display_days
         showlegend=False
     )
     
+    data_start, data_end = _first_last_with_values(
+        min_hr_dates, min_hr_values, max_hr_values, hrv_values
+    )
+    x_range = [data_start, data_end] if data_start and data_end else (
+        [display_start_date, display_end_date] if display_start_date else None
+    )
+    hr_y_range = _padded_numeric_range(min_hr_values + max_hr_values)
+    hrv_y_range = _padded_numeric_range(hrv_values)
+
     # Update axes for Chart A (row 1, col 1) - removed Date label
-    fig.update_xaxes(title_text='', showgrid=True, gridcolor='#E0E0E0', row=1, col=1)
-    fig.update_yaxes(title_text='Heart Rate (bpm)', showgrid=True, gridcolor='#E0E0E0', row=1, col=1)
+    fig.update_xaxes(
+        title_text='', showgrid=True, gridcolor='#E0E0E0', type='date',
+        range=x_range,
+        row=1, col=1,
+    )
+    fig.update_yaxes(
+        title_text='Heart Rate (bpm)', showgrid=True, gridcolor='#E0E0E0',
+        rangemode='normal', range=hr_y_range, row=1, col=1,
+    )
     
     # Update axes for Chart B (row 1, col 2)
     fig.update_xaxes(title_text='Time', showgrid=True, gridcolor='#E0E0E0', row=1, col=2)
     fig.update_yaxes(title_text='', row=1, col=2)
     
-    # Update axes for Chart D - HRV (row 2, col 1) - set range to 0-100
-    fig.update_xaxes(title_text='Date', showgrid=True, gridcolor='#E0E0E0', row=2, col=1)
-    fig.update_yaxes(title_text='HRV (ms)', showgrid=True, gridcolor='#E0E0E0', range=[0, 100], row=2, col=1)
+    # Update axes for Chart D - HRV (row 2, col 1)
+    fig.update_xaxes(
+        title_text='Date', showgrid=True, gridcolor='#E0E0E0', type='date',
+        range=x_range,
+        row=2, col=1,
+    )
+    fig.update_yaxes(
+        title_text='HRV (ms)', showgrid=True, gridcolor='#E0E0E0',
+        rangemode='normal', range=hrv_y_range, row=2, col=1,
+    )
     
     # Update axes for Chart C - Distribution (row 2, col 2)
     fig.update_xaxes(title_text='Heart Rate (bpm)', showgrid=True, gridcolor='#E0E0E0', range=[0, max_hr], row=2, col=2)
     fig.update_yaxes(title_text='Frequency', showgrid=True, gridcolor='#E0E0E0', row=2, col=2)
+
+    _enable_hover_crosshair(fig, [(1, 1), (1, 2), (2, 1), (2, 2)])
     
     return json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder), total_zone_times
 
@@ -950,49 +1083,17 @@ def get_historical_data():
     
     try:
         weeks = int(weeks_str)
-        if weeks not in [4, 8, 12, 16, 24, 48]:
-            return jsonify({'error': 'Invalid weeks parameter. Must be 4, 8, 12, 16, 24, or 48'}), 400
+        if weeks not in [4, 8, 12, 16, 24, 48, 72]:
+            return jsonify({'error': 'Invalid weeks parameter. Must be 4, 8, 12, 16, 24, 48, or 72'}), 400
         
         # Get Garmin client
         client = get_garmin_client()
-        
-        # Calculate display period and moving average window
+        prefetch_start_date, start_date, end_date = _historical_period_bounds(weeks)
         display_days = weeks * 7
-        ma_window = 28  # Fixed 4-week (28-day) moving average regardless of display period
-        prefetch_days = 27  # Always prefetch 27 days for 28-day MA
-        
-        # Fetch data for the last N weeks (excluding today)
-        # Also fetch extra data for moving average calculation
-        end_date = datetime.now() - timedelta(days=1)  # Exclude today
-        start_date = end_date - timedelta(weeks=weeks)
-        
-        # Fetch additional data before start_date for moving average
-        prefetch_start_date = start_date - timedelta(days=prefetch_days)
-        
-        weeks_data = {}
-        all_heart_rates = []
-        
-        current_date = prefetch_start_date
-        while current_date <= end_date:
-            date_str = current_date.strftime('%Y-%m-%d')
-            try:
-                hr_data = client.get_heart_rate_data(current_date)
-                hrv_data = client.get_hrv_data(current_date)
-                
-                # ALWAYS add date to weeks_data, even if no HR data
-                # This ensures all dates are in the dictionary for proper moving average calculation
-                weeks_data[date_str] = {
-                    'hr_data': hr_data if hr_data else [],
-                    'hrv': hrv_data
-                }
-                
-                # Only include in stats if within display period and has data
-                if hr_data and current_date >= start_date:
-                    all_heart_rates.extend([point['heart_rate'] for point in hr_data])
-            except Exception as e:
-                logger.debug(f"Could not fetch data for {date_str}: {e}")
-            
-            current_date += timedelta(days=1)
+
+        weeks_data, all_heart_rates = _load_hr_hrv_period(
+            client, prefetch_start_date, end_date, start_date
+        )
         
         # Check if we have any actual HR data (not just empty dates)
         has_data = any(entry.get('hr_data') for entry in weeks_data.values())
@@ -1040,6 +1141,91 @@ def get_historical_data():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/get_historical_cache_status')
+def get_historical_cache_status():
+    """Report which days in a historical window still need a Garmin fetch."""
+    weeks_str = request.args.get('weeks', '4')
+    try:
+        weeks = int(weeks_str)
+        if weeks not in [4, 8, 12, 16, 24, 48, 72]:
+            return jsonify({'error': 'Invalid weeks parameter. Must be 4, 8, 12, 16, 24, 48, or 72'}), 400
+        prefetch_start, start_date, end_date = _historical_period_bounds(weeks)
+        dates = _dates_inclusive(prefetch_start, end_date)
+        date_strs = [item.strftime('%Y-%m-%d') for item in dates]
+        cache = CacheManager()
+        hr_hits = cache.get_heart_rate_data_bulk(date_strs)
+        missing = [ds for ds in date_strs if ds not in hr_hits]
+        empty = [ds for ds in date_strs if ds in hr_hits and hr_hits[ds] is None]
+        with_data = [ds for ds in date_strs if hr_hits.get(ds)]
+        fetch_dates = missing + empty
+        return jsonify({
+            'weeks': weeks,
+            'start': start_date.strftime('%Y-%m-%d'),
+            'end': end_date.strftime('%Y-%m-%d'),
+            'days': len(date_strs),
+            'with_data': len(with_data),
+            'empty': len(empty),
+            'missing': len(missing),
+            'ranges': [
+                {'start': range_start, 'end': range_end}
+                for range_start, range_end in _contiguous_date_ranges(fetch_dates, 7)
+            ],
+        })
+    except ValueError:
+        return jsonify({'error': 'Invalid weeks parameter. Must be an integer'}), 400
+    except Exception as e:
+        logger.exception('Failed to read historical cache status')
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/refresh_historical_data', methods=['POST'])
+def refresh_historical_data():
+    """Fetch one bounded HR/HRV chunk from Garmin and write it to the cache."""
+    payload = request.get_json(silent=True) or {}
+    try:
+        start = date.fromisoformat(payload.get('start', ''))
+        end = date.fromisoformat(payload.get('end', ''))
+        if end < start:
+            raise ValueError('end must be on or after start')
+        if (end - start).days >= 7:
+            raise ValueError('refresh chunks may contain at most 7 days')
+        if start > datetime.now().date():
+            raise ValueError('future dates cannot be imported')
+        client = get_garmin_client()
+        dates = _dates_inclusive(
+            datetime.combine(start, datetime.min.time()),
+            datetime.combine(end, datetime.min.time()),
+        )
+        imported = 0
+        empty = 0
+        errors = []
+        for day in dates:
+            try:
+                hr_data = client.get_heart_rate_data(day, force=True)
+                client.get_hrv_data(day, force=True)
+                if hr_data:
+                    imported += 1
+                else:
+                    empty += 1
+            except Exception as exc:
+                logger.warning("Historical refresh failed for %s: %s", day.date(), exc)
+                errors.append(f"{day.strftime('%Y-%m-%d')}: {exc}")
+        return jsonify({
+            'status': 'complete' if not errors else 'partial',
+            'start': start.isoformat(),
+            'end': end.isoformat(),
+            'days': len(dates),
+            'imported': imported,
+            'empty': empty,
+            'errors': errors[:8],
+        })
+    except (ValueError, KeyError, json.JSONDecodeError) as exc:
+        return jsonify({'error': str(exc)}), 400
+    except Exception as exc:
+        logger.exception('Failed to refresh historical data')
+        return jsonify({'error': str(exc)}), 500
+
+
 @app.route('/get_monthly_data')
 def get_monthly_data():
     """API endpoint to get historical heart rate data for a specific month"""
@@ -1082,32 +1268,10 @@ def get_monthly_data():
         
         # Fetch additional data before start_date for moving average
         prefetch_start_date = start_date - timedelta(days=27)  # Always prefetch 27 days for 28-day MA
-        
-        # Fetch data for all days in the month (plus prefetch period)
-        month_data = {}
-        all_heart_rates = []
-        
-        current_date = prefetch_start_date
-        while current_date <= end_date:
-            date_str = current_date.strftime('%Y-%m-%d')
-            try:
-                hr_data = client.get_heart_rate_data(current_date)
-                hrv_data = client.get_hrv_data(current_date)
-                
-                # ALWAYS add date to month_data, even if no HR data
-                # This ensures all dates are in the dictionary for proper moving average calculation
-                month_data[date_str] = {
-                    'hr_data': hr_data if hr_data else [],
-                    'hrv': hrv_data
-                }
-                
-                # Only include in stats if within display period and has data
-                if hr_data and current_date >= start_date:
-                    all_heart_rates.extend([point['heart_rate'] for point in hr_data])
-            except Exception as e:
-                logger.debug(f"Could not fetch data for {date_str}: {e}")
-            
-            current_date += timedelta(days=1)
+
+        month_data, all_heart_rates = _load_hr_hrv_period(
+            client, prefetch_start_date, end_date, start_date
+        )
         
         # Check if we have any actual HR data (not just empty dates)
         has_data = any(entry.get('hr_data') for entry in month_data.values())
@@ -1353,7 +1517,7 @@ def get_zone_training_data():
                 name='Z1',
                 showlegend=False,
                 customdata=[format_time(v) for v in daily_z1],
-                hovertemplate='<b>%{x}</b><br>Time: %{customdata}<extra></extra>'
+                hovertemplate='%{customdata}<extra></extra>'
             ),
             row=1, col=1
         )
@@ -1367,7 +1531,7 @@ def get_zone_training_data():
                 name='10-day MA',
                 showlegend=False,
                 customdata=[format_time(v) if v is not None else '' for v in daily_z1_ma],
-                hovertemplate='<b>%{x}</b><br>10-day MA: %{customdata}<extra></extra>'
+                hovertemplate='10-day MA: %{customdata}<extra></extra>'
             ),
             row=1, col=1
         )
@@ -1381,7 +1545,7 @@ def get_zone_training_data():
                 name='Z1',
                 showlegend=False,
                 customdata=[format_time(v) for v in weekly_z1_values],
-                hovertemplate='<b>%{x}</b><br>Time: %{customdata}<extra></extra>'
+                hovertemplate='%{customdata}<extra></extra>'
             ),
             row=1, col=2
         )
@@ -1395,7 +1559,7 @@ def get_zone_training_data():
                 name='10-week MA',
                 showlegend=False,
                 customdata=[format_time(v) if v is not None else '' for v in weekly_z1_ma],
-                hovertemplate='<b>%{x}</b><br>10-week MA: %{customdata}<extra></extra>'
+                hovertemplate='10-week MA: %{customdata}<extra></extra>'
             ),
             row=1, col=2
         )
@@ -1409,7 +1573,7 @@ def get_zone_training_data():
                 name='Z2',
                 showlegend=False,
                 customdata=[format_time(v) for v in daily_z2],
-                hovertemplate='<b>%{x}</b><br>Time: %{customdata}<extra></extra>'
+                hovertemplate='%{customdata}<extra></extra>'
             ),
             row=2, col=1
         )
@@ -1423,7 +1587,7 @@ def get_zone_training_data():
                 name='10-day MA',
                 showlegend=False,
                 customdata=[format_time(v) if v is not None else '' for v in daily_z2_ma],
-                hovertemplate='<b>%{x}</b><br>10-day MA: %{customdata}<extra></extra>'
+                hovertemplate='10-day MA: %{customdata}<extra></extra>'
             ),
             row=2, col=1
         )
@@ -1437,7 +1601,7 @@ def get_zone_training_data():
                 name='Z2',
                 showlegend=False,
                 customdata=[format_time(v) for v in weekly_z2_values],
-                hovertemplate='<b>%{x}</b><br>Time: %{customdata}<extra></extra>'
+                hovertemplate='%{customdata}<extra></extra>'
             ),
             row=2, col=2
         )
@@ -1451,7 +1615,7 @@ def get_zone_training_data():
                 name='10-week MA',
                 showlegend=False,
                 customdata=[format_time(v) if v is not None else '' for v in weekly_z2_ma],
-                hovertemplate='<b>%{x}</b><br>10-week MA: %{customdata}<extra></extra>'
+                hovertemplate='10-week MA: %{customdata}<extra></extra>'
             ),
             row=2, col=2
         )
@@ -1465,7 +1629,7 @@ def get_zone_training_data():
                 name='Z4+Z5',
                 showlegend=False,
                 customdata=[format_time(v) for v in daily_z4_z5],
-                hovertemplate='<b>%{x}</b><br>Time: %{customdata}<extra></extra>'
+                hovertemplate='%{customdata}<extra></extra>'
             ),
             row=3, col=1
         )
@@ -1479,7 +1643,7 @@ def get_zone_training_data():
                 name='10-day MA',
                 showlegend=False,
                 customdata=[format_time(v) if v is not None else '' for v in daily_z4_z5_ma],
-                hovertemplate='<b>%{x}</b><br>10-day MA: %{customdata}<extra></extra>'
+                hovertemplate='10-day MA: %{customdata}<extra></extra>'
             ),
             row=3, col=1
         )
@@ -1493,7 +1657,7 @@ def get_zone_training_data():
                 name='Z4+Z5',
                 showlegend=False,
                 customdata=[format_time(v) for v in weekly_z4_z5_values],
-                hovertemplate='<b>%{x}</b><br>Time: %{customdata}<extra></extra>'
+                hovertemplate='%{customdata}<extra></extra>'
             ),
             row=3, col=2
         )
@@ -1507,7 +1671,7 @@ def get_zone_training_data():
                 name='10-week MA',
                 showlegend=False,
                 customdata=[format_time(v) if v is not None else '' for v in weekly_z4_z5_ma],
-                hovertemplate='<b>%{x}</b><br>10-week MA: %{customdata}<extra></extra>'
+                hovertemplate='10-week MA: %{customdata}<extra></extra>'
             ),
             row=3, col=2
         )
@@ -1548,6 +1712,7 @@ def get_zone_training_data():
             title_x=0.5,
             margin=dict(t=100, b=100, l=60, r=60)
         )
+        _enable_hover_crosshair(fig, [(1, 1), (1, 2), (2, 1), (2, 2), (3, 1), (3, 2)])
         
         # Convert to JSON
         chart_json = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
@@ -1706,7 +1871,7 @@ def get_zone_calendar_data():
                         showlegend=(row_idx == 1),
                         legendgroup=zone_key,
                         customdata=custom_vals,
-                        hovertemplate='<b>%{x}</b><br>' + zone_labels[zone_key] + ': %{customdata}<extra></extra>'
+                        hovertemplate=zone_labels[zone_key] + ': %{customdata}<extra></extra>'
                     ),
                     row=row_idx, col=1
                 )
@@ -1724,6 +1889,7 @@ def get_zone_calendar_data():
             title_x=0.5,
             margin=dict(t=120, b=60, l=80, r=60)
         )
+        _enable_hover_crosshair(fig, [(row, 1) for row in range(1, 6)])
 
         chart_json = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
         return jsonify({'chart': chart_json})

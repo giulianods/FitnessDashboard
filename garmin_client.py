@@ -57,9 +57,33 @@ class GarminClient:
         try:
             self.client = Garmin(self.email, self.password)
             self.client.login()
-            logger.debug("Successfully logged in to Garmin Connect")
+            logger.info("Successfully logged in to Garmin Connect")
         except Exception as e:
             raise Exception(f"Failed to login to Garmin Connect: {e}")
+
+    def _ensure_login(self) -> None:
+        if self.client is None:
+            if not self.email or not self.password:
+                raise Exception("Not logged in. Call login() first")
+            self.login()
+
+    def _is_auth_failure(self, exc: Exception) -> bool:
+        text = str(exc).lower()
+        return any(token in text for token in (
+            'oauth', 'token', 'unauthorized', '401', 'login', 'forbidden',
+        ))
+
+    def _garmin_call(self, fn):
+        """Call Garmin, retrying once after a fresh login on auth failures."""
+        self._ensure_login()
+        try:
+            return fn()
+        except Exception as exc:
+            if not self._is_auth_failure(exc):
+                raise
+            logger.warning("Garmin auth failed (%s); logging in again", exc)
+            self.login()
+            return fn()
     
     def _is_future_date(self, date: datetime) -> bool:
         """
@@ -73,13 +97,14 @@ class GarminClient:
         """
         return date.date() > datetime.now().date()
     
-    def get_heart_rate_data(self, date: datetime) -> List[Dict]:
+    def get_heart_rate_data(self, date: datetime, force: bool = False) -> List[Dict]:
         """
         Get heart rate data for a specific date
         Uses cache if available, otherwise fetches from API
         
         Args:
             date: Date to retrieve heart rate data for
+            force: Ignore cache and fetch from Garmin
             
         Returns:
             List of heart rate data points with timestamps
@@ -90,53 +115,44 @@ class GarminClient:
             return None
         
         # Check cache first
-        if self.use_cache and self.cache:
-            cached_data = self.cache.get_heart_rate_data(date)
-            if cached_data is not None:
-                return cached_data
+        if not force and self.use_cache and self.cache:
+            cached = self.cache.lookup_heart_rate_data(date)
+            if cached.hit:
+                return cached.value
         
-        # Cache miss or caching disabled - fetch from API
-        if not self.client:
-            raise Exception("Not logged in. Call login() first")
+        self._ensure_login()
         
         try:
             date_str = date.strftime('%Y-%m-%d')
-            logger.debug(f"Fetching heart rate data from Garmin API for {date_str}...")
+            logger.info("Fetching heart rate data from Garmin for %s", date_str)
             
-            # Get heart rate data for the specified date
-            hr_data = self.client.get_heart_rates(date_str)
+            hr_data = self._garmin_call(lambda: self.client.get_heart_rates(date_str))
             
             if not hr_data:
                 logger.debug(f"No heart rate data found for {date_str}")
-                # Cache None for past dates (not future dates which are already filtered)
                 if self.use_cache and self.cache:
                     self.cache.set_heart_rate_data(date, None)
                 return None
             
-            # Parse the heart rate values
             heart_rate_values = hr_data.get('heartRateValues', [])
             
             if not heart_rate_values:
                 logger.debug(f"No heart rate values found for {date_str}")
-                # Cache None for past dates
                 if self.use_cache and self.cache:
                     self.cache.set_heart_rate_data(date, None)
                 return None
             
-            # Convert to list of dicts with timestamp and value
             parsed_data = []
             for timestamp, value in heart_rate_values:
                 if value is not None and value > 0:
-                    # Timestamp is in milliseconds
                     dt = datetime.fromtimestamp(timestamp / 1000)
                     parsed_data.append({
                         'timestamp': dt,
                         'heart_rate': value
                     })
             
-            logger.debug(f"Retrieved {len(parsed_data)} heart rate data points from API")
+            logger.info("Cached %s heart-rate points for %s", len(parsed_data), date_str)
             
-            # Cache the data
             if self.use_cache and self.cache:
                 self.cache.set_heart_rate_data(date, parsed_data)
             
@@ -155,59 +171,84 @@ class GarminClient:
         yesterday = datetime.now() - timedelta(days=1)
         return self.get_heart_rate_data(yesterday)
     
-    def get_hrv_data(self, date: datetime) -> Optional[float]:
+    def get_hrv_data(self, date: datetime, force: bool = False) -> Optional[float]:
         """
         Get HRV (Heart Rate Variability) data for a specific date
         Uses cache if available, otherwise fetches from API
-        
-        The HRV data is retrieved from the sleep data endpoint, which returns
-        avgOvernightHrv at the top level of the response.
-        
-        Args:
-            date: Date to retrieve HRV data for
-            
-        Returns:
-            HRV value (average overnight HRV in milliseconds) or None if not available
         """
-        # Skip future dates entirely - they never have data
         if self._is_future_date(date):
             logger.debug(f"Skipping future date for HRV: {date.strftime('%Y-%m-%d')}")
             return None
         
-        # Check cache first
-        if self.use_cache and self.cache:
-            cached_value = self.cache.get_hrv_data(date)
-            if cached_value is not None:
-                return cached_value
+        if not force and self.use_cache and self.cache:
+            cached = self.cache.lookup_hrv_data(date)
+            if cached.hit:
+                return cached.value
         
-        # Cache miss or caching disabled - fetch from API
-        if not self.client:
-            raise Exception("Not logged in. Call login() first")
+        self._ensure_login()
         
         date_str = date.strftime('%Y-%m-%d')
-        logger.debug(f"Fetching HRV data from Garmin API for {date_str}...")
+        logger.info("Fetching HRV data from Garmin for %s", date_str)
+        
+        try:
+            sleep_data = self._garmin_call(lambda: self.client.get_sleep_data(date_str))
+        except Exception as e:
+            logger.warning("Failed to get HRV data for %s: %s", date_str, e)
+            return None
         
         hrv_value = None
-        try:
-            # Get sleep data which contains avgOvernightHrv
-            sleep_data = self.client.get_sleep_data(date_str)
-            
-            if sleep_data and isinstance(sleep_data, dict):
-                # Extract avgOvernightHrv from the top level of the response
-                hrv_value = sleep_data.get('avgOvernightHrv')
-                
-                if hrv_value is not None:
-                    logger.debug(f"Retrieved HRV value from API: {hrv_value} ms")
-                else:
-                    logger.debug(f"No avgOvernightHrv found in sleep data for {date_str}")
+        if sleep_data and isinstance(sleep_data, dict):
+            hrv_value = sleep_data.get('avgOvernightHrv')
+            if hrv_value is not None:
+                logger.debug(f"Retrieved HRV value from API: {hrv_value} ms")
             else:
-                logger.debug(f"No sleep data found for {date_str}")
-                
-        except Exception as e:
-            logger.debug(f"Failed to get HRV data for {date_str}: {e}")
+                logger.debug(f"No avgOvernightHrv found in sleep data for {date_str}")
+        else:
+            logger.debug(f"No sleep data found for {date_str}")
         
-        # Cache the result (even if None) to avoid repeated API calls
         if self.use_cache and self.cache:
             self.cache.set_hrv_data(date, hrv_value)
         
         return hrv_value
+
+    def get_heart_rate_data_for_dates(
+        self, dates: List[datetime], refetch_empty: bool = False
+    ) -> Dict[str, Optional[List[Dict]]]:
+        """Load heart-rate series for many dates, using one bulk cache read."""
+        date_strs = [d.strftime('%Y-%m-%d') for d in dates]
+        result: Dict[str, Optional[List[Dict]]] = {}
+        if self.use_cache and self.cache:
+            result.update(self.cache.get_heart_rate_data_bulk(date_strs))
+        for date, date_str in zip(dates, date_strs):
+            cached_hit = date_str in result
+            cached_empty = cached_hit and result[date_str] is None
+            if cached_hit and not (refetch_empty and cached_empty):
+                continue
+            try:
+                result[date_str] = self.get_heart_rate_data(
+                    date, force=refetch_empty and cached_empty
+                )
+            except Exception as exc:
+                logger.warning("Could not fetch HR data for %s: %s", date_str, exc)
+        return result
+
+    def get_hrv_data_for_dates(
+        self, dates: List[datetime], refetch_empty: bool = False
+    ) -> Dict[str, Optional[float]]:
+        """Load HRV values for many dates, using one bulk cache read."""
+        date_strs = [d.strftime('%Y-%m-%d') for d in dates]
+        result: Dict[str, Optional[float]] = {}
+        if self.use_cache and self.cache:
+            result.update(self.cache.get_hrv_data_bulk(date_strs))
+        for date, date_str in zip(dates, date_strs):
+            cached_hit = date_str in result
+            cached_empty = cached_hit and result[date_str] is None
+            if cached_hit and not (refetch_empty and cached_empty):
+                continue
+            try:
+                result[date_str] = self.get_hrv_data(
+                    date, force=refetch_empty and cached_empty
+                )
+            except Exception as exc:
+                logger.warning("Could not fetch HRV data for %s: %s", date_str, exc)
+        return result
